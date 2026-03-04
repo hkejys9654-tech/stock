@@ -12,16 +12,14 @@
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prop-types/15.8.1/prop-types.min.js"></script>
     <script src="https://unpkg.com/recharts@2.12.7/umd/Recharts.js"></script>
 
     <style>
-        body { font-family: 'Noto Sans KR', sans-serif; background-color: #f8fafc; color: #1e293b; margin: 0; padding: 0; }
+        body { font-family: 'Noto Sans KR', sans-serif; background-color: #ffffff; color: #1e293b; margin: 0; padding: 0; }
         .no-scrollbar::-webkit-scrollbar { display: none; }
-        .animate-fade-in { animation: fadeIn 0.3s ease-out forwards; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
-        .tabular-nums { font-variant-numeric: tabular-nums; }
-        .active-tab { color: #10b981 !important; border-bottom: 2px solid #10b981; }
+        .animate-fade-in { animation: fadeIn 0.2s ease-out forwards; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .tabular-nums { font-variant-numeric: tabular-nums; letter-spacing: -0.5px; }
     </style>
 </head>
 <body>
@@ -31,20 +29,24 @@
         const { useState, useEffect, useMemo } = React;
         const { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } = window.Recharts;
 
+        const PROXY_BASE = "https://api.allorigins.win/raw?url=";
+
         const formatMoney = (v, market) => {
             const locale = market === 'US' ? 'en-US' : 'ko-KR';
             const currency = market === 'US' ? 'USD' : 'KRW';
-            return new Intl.NumberFormat(locale, { style: 'currency', currency }).format(v || 0);
+            return new Intl.NumberFormat(locale, { 
+                style: 'currency', 
+                currency,
+                maximumFractionDigits: market === 'US' ? 2 : 0 
+            }).format(v || 0);
         };
 
-        const PROXY_BASE = "https://api.allorigins.win/raw?url=";
+        const formatPercent = (v) => `${v >= 0 ? '+' : ''}${v.toFixed(2)}%`;
 
         const App = () => {
-            const [market, setMarket] = useState('KR'); // KR or US
             const [stocks, setStocks] = useState(() => JSON.parse(localStorage.getItem('vstock_list_v2')) || [
                 { id: '005930.KS', name: '삼성전자', market: 'KR' },
                 { id: 'TSLA', name: '테슬라', market: 'US' },
-                { id: '035720.KS', name: '카카오', market: 'KR' },
                 { id: 'NVDA', name: '엔비디아', market: 'US' }
             ]);
 
@@ -89,244 +91,252 @@
 
             useEffect(() => {
                 fetchPrices();
-                const timer = setInterval(fetchPrices, 15000);
+                const timer = setInterval(fetchPrices, 30000);
                 return () => clearInterval(timer);
             }, [stocks]);
 
-            // 검색 기능
             useEffect(() => {
                 if (searchQuery.length < 2) { setSearchResults([]); return; }
                 const timer = setTimeout(async () => {
-                    const url = `https://query2.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(searchQuery)}&quotesCount=5`;
-                    const res = await fetch(PROXY_BASE + encodeURIComponent(url));
-                    const data = await res.json();
-                    setSearchResults(data.quotes.map(q => ({
-                        id: q.symbol, name: q.shortname || q.symbol, 
-                        market: q.symbol.includes('.') ? 'KR' : 'US'
-                    })));
+                    try {
+                        const url = `https://query2.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(searchQuery)}&quotesCount=5`;
+                        const res = await fetch(PROXY_BASE + encodeURIComponent(url));
+                        const data = await res.json();
+                        setSearchResults(data.quotes.map(q => ({
+                            id: q.symbol, name: q.shortname || q.symbol, 
+                            market: q.symbol.includes('.') ? 'KR' : 'US'
+                        })));
+                    } catch (e) { setSearchResults([]); }
                 }, 500);
                 return () => clearTimeout(timer);
             }, [searchQuery]);
 
-            const exportCSV = () => {
-                let csv = "\ufeff구분,종목,수량,평단가,현재가,수익률\n";
-                portfolio.forEach(p => {
-                    const cur = prices[p.symbol]?.[prices[p.symbol].length-1]?.price || 0;
-                    csv += `보유,${p.symbol},${p.quantity},${p.avgPrice.toFixed(0)},${cur.toFixed(0)},${((cur-p.avgPrice)/p.avgPrice*100).toFixed(2)}%\n`;
-                });
-                const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-                const link = document.createElement("a");
-                link.href = URL.createObjectURL(blob);
-                link.download = `투자내역_${new Date().toLocaleDateString()}.csv`;
-                link.click();
+            const handleTrade = (type) => {
+                const currentPrice = prices[selectedSymbol]?.[prices[selectedSymbol].length-1]?.price || 0;
+                if (currentPrice <= 0) return alert('가격을 불러오는 중입니다.');
+
+                const totalCost = currentPrice * tradeQuantity;
+                if (type === 'BUY') {
+                    if (balance < totalCost) return alert('잔액이 부족합니다.');
+                    setBalance(prev => prev - totalCost);
+                    setPortfolio(prev => {
+                        const existing = prev.find(p => p.symbol === selectedSymbol);
+                        if (existing) {
+                            return prev.map(p => p.symbol === selectedSymbol 
+                                ? { ...p, quantity: p.quantity + tradeQuantity, avgPrice: (p.avgPrice * p.quantity + totalCost) / (p.quantity + tradeQuantity) }
+                                : p);
+                        }
+                        return [...prev, { symbol: selectedSymbol, quantity: tradeQuantity, avgPrice: currentPrice }];
+                    });
+                } else {
+                    const pos = portfolio.find(p => p.symbol === selectedSymbol);
+                    if (!pos || pos.quantity < tradeQuantity) return alert('보유 수량이 부족합니다.');
+                    setBalance(prev => prev + totalCost);
+                    setPortfolio(prev => prev.map(p => p.symbol === selectedSymbol 
+                        ? { ...p, quantity: p.quantity - tradeQuantity } : p).filter(p => p.quantity > 0));
+                }
+
+                setHistory(prev => [{
+                    id: Date.now(),
+                    symbol: selectedSymbol,
+                    type,
+                    quantity: tradeQuantity,
+                    price: currentPrice,
+                    timestamp: new Date().toISOString()
+                }, ...prev]);
             };
 
             const currentPrice = prices[selectedSymbol]?.[prices[selectedSymbol].length-1]?.price || 0;
             const selectedStockInfo = stocks.find(s => s.id === selectedSymbol);
             const userPos = portfolio.find(p => p.symbol === selectedSymbol);
+            const totalAssets = balance + portfolio.reduce((s,i)=>s+(i.quantity*(prices[i.symbol]?.[prices[i.symbol].length-1]?.price||0)),0);
 
             return (
-                <div className="max-w-md mx-auto min-h-screen bg-white shadow-2xl relative">
-                    {/* Header */}
-                    <header className="px-5 py-4 flex justify-between items-center border-b border-slate-100 sticky top-0 bg-white/80 backdrop-blur-md z-50">
+                <div className="max-w-md mx-auto min-h-screen bg-white shadow-sm relative pb-24">
+                    <header className="px-5 py-4 flex justify-between items-center sticky top-0 bg-white/90 backdrop-blur-sm z-50">
                         <div className="flex items-center gap-2">
-                            <i className="fa-solid fa-chart-line text-emerald-500 text-xl"></i>
-                            <h1 className="text-lg font-bold text-slate-800">V-STOCK</h1>
+                            <div className="w-8 h-8 bg-emerald-500 rounded-lg flex items-center justify-center">
+                                <i className="fa-solid fa-leaf text-white text-xs"></i>
+                            </div>
+                            <h1 className="text-sm font-black text-slate-800 tracking-tighter uppercase">V-STOCK GLOBAL</h1>
                         </div>
-                        <div className="flex gap-4">
-                            <button onClick={exportCSV} className="text-slate-400 hover:text-emerald-500 transition-colors"><i className="fa-solid fa-file-export"></i></button>
-                            <button onClick={() => location.reload()} className="text-slate-400 hover:text-emerald-500 transition-colors"><i className="fa-solid fa-rotate"></i></button>
-                        </div>
+                        <button onClick={() => location.reload()} className="text-slate-300 hover:text-emerald-500 transition-colors">
+                            <i className="fa-solid fa-rotate-right text-xs"></i>
+                        </button>
                     </header>
 
                     <main className="p-5 animate-fade-in">
-                        {/* Balance Card */}
-                        <div className="bg-emerald-500 rounded-3xl p-6 text-white shadow-lg shadow-emerald-200 mb-6">
-                            <div className="flex justify-between items-start mb-2">
-                                <span className="text-xs font-medium opacity-80 uppercase tracking-wider">Total Assets</span>
-                                <div className="bg-white/20 px-2 py-1 rounded-lg text-[10px] font-bold">실시간</div>
-                            </div>
-                            <h2 className="text-xl font-black tabular-nums mb-4">{formatMoney(balance + portfolio.reduce((s,i)=>s+(i.quantity*(prices[i.symbol]?.[prices[i.symbol].length-1]?.price||0)),0), 'KR')}</h2>
-                            <div className="flex gap-4 border-t border-white/10 pt-4">
+                        {/* Summary Card */}
+                        <div className="mb-8">
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Total Balance</p>
+                            <h2 className="text-2xl font-black tabular-nums text-slate-800 mb-4">{formatMoney(totalAssets, 'KR')}</h2>
+                            <div className="flex gap-6">
                                 <div>
-                                    <p className="text-[10px] opacity-70 mb-0.5">가용 현금</p>
-                                    <p className="text-sm font-bold tabular-nums">{formatMoney(balance, 'KR')}</p>
+                                    <p className="text-[10px] text-slate-400 font-medium mb-0.5">가용 현금</p>
+                                    <p className="text-xs font-bold tabular-nums text-emerald-600">{formatMoney(balance, 'KR')}</p>
                                 </div>
-                                <div className="border-l border-white/10 pl-4">
-                                    <p className="text-[10px] opacity-70 mb-0.5">보유 종목</p>
-                                    <p className="text-sm font-bold tabular-nums">{portfolio.length}개</p>
+                                <div>
+                                    <p className="text-[10px] text-slate-400 font-medium mb-0.5">보유 종목</p>
+                                    <p className="text-xs font-bold tabular-nums text-slate-800">{portfolio.length} Items</p>
                                 </div>
                             </div>
                         </div>
 
                         {activeTab === 'dashboard' && (
-                            <div className="space-y-4 animate-fade-in">
-                                <div className="flex justify-between items-center">
-                                    <h3 className="font-bold text-slate-800">내 포트폴리오</h3>
-                                    <span className="text-[10px] font-bold text-slate-400 uppercase">KRW 기반</span>
+                            <div className="space-y-6">
+                                <div className="flex justify-between items-center border-b border-slate-50 pb-2">
+                                    <h3 className="text-xs font-bold text-slate-800 uppercase">My Portfolio</h3>
                                 </div>
                                 {portfolio.length === 0 ? (
-                                    <div className="text-center py-20 bg-slate-50 rounded-3xl border border-dashed border-slate-200">
-                                        <p className="text-sm text-slate-400 font-medium">보유한 주식이 없어요 지미!</p>
+                                    <div className="py-12 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                                        <p className="text-xs text-slate-400 font-medium">지미, 아직 보유한 주식이 없어!</p>
                                     </div>
                                 ) : (
-                                    <div className="space-y-3">
+                                    <ul className="divide-y divide-slate-50">
                                         {portfolio.map(p => {
                                             const cp = prices[p.symbol]?.[prices[p.symbol].length-1]?.price || p.avgPrice;
                                             const gain = (cp - p.avgPrice) / p.avgPrice * 100;
                                             return (
-                                                <div key={p.symbol} onClick={() => {setSelectedSymbol(p.symbol); setActiveTab('trade');}} className="bg-white border border-slate-100 p-4 rounded-2xl flex justify-between items-center shadow-sm active:scale-95 transition-all">
+                                                <li key={p.symbol} onClick={() => {setSelectedSymbol(p.symbol); setActiveTab('trade');}} className="py-4 flex justify-between items-center active:opacity-60 transition-opacity cursor-pointer">
                                                     <div className="flex items-center gap-3">
-                                                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-xs ${p.symbol.includes('.KS') ? 'bg-blue-50 text-blue-500' : 'bg-orange-50 text-orange-500'}`}>
-                                                            {p.symbol.includes('.KS') ? '국내' : '해외'}
-                                                        </div>
+                                                        <div className={`w-2 h-2 rounded-full ${p.symbol.includes('.KS') ? 'bg-blue-400' : 'bg-emerald-400'}`}></div>
                                                         <div>
-                                                            <p className="text-sm font-bold text-slate-800">{stocks.find(s=>s.id===p.symbol)?.name}</p>
-                                                            <p className="text-[10px] text-slate-400 font-bold">{p.quantity}주</p>
+                                                            <p className="text-xs font-bold text-slate-800">{stocks.find(s=>s.id===p.symbol)?.name}</p>
+                                                            <p className="text-[10px] text-slate-400 font-medium">{p.quantity} Shares</p>
                                                         </div>
                                                     </div>
                                                     <div className="text-right">
-                                                        <p className="text-sm font-bold tabular-nums">{formatMoney(cp, p.symbol.includes('.') ? 'KR':'US')}</p>
-                                                        <p className={`text-[11px] font-bold ${gain >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{formatPercent(gain)}</p>
+                                                        <p className="text-xs font-bold tabular-nums text-slate-800">{formatMoney(cp, p.symbol.includes('.') ? 'KR':'US')}</p>
+                                                        <p className={`text-[10px] font-bold tabular-nums ${gain >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{formatPercent(gain)}</p>
                                                     </div>
-                                                </div>
+                                                </li>
                                             );
                                         })}
-                                    </div>
+                                    </ul>
                                 )}
                             </div>
                         )}
 
                         {activeTab === 'trade' && (
-                            <div className="space-y-4 animate-fade-in">
-                                {/* Search Bar */}
+                            <div className="space-y-6">
                                 <div className="relative">
-                                    <i className="fa-solid fa-search absolute left-4 top-3.5 text-slate-300 text-sm"></i>
+                                    <i className="fa-solid fa-magnifying-glass absolute left-4 top-3.5 text-slate-300 text-[10px]"></i>
                                     <input 
                                         type="text" 
-                                        placeholder="종목명 또는 코드 검색..." 
+                                        placeholder="검색 (예: 테슬라, NVDA)" 
                                         value={searchQuery}
                                         onChange={e => setSearchQuery(e.target.value)}
-                                        className="w-full bg-slate-100 border-none rounded-2xl pl-10 pr-4 py-3 text-sm font-bold focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+                                        className="w-full bg-slate-50 border-none rounded-xl pl-10 pr-4 py-3 text-xs font-bold focus:ring-1 focus:ring-emerald-500 outline-none transition-all"
                                     />
                                     {searchResults.length > 0 && (
-                                        <div className="absolute top-14 left-0 right-0 bg-white border border-slate-100 rounded-2xl shadow-xl z-50 overflow-hidden">
+                                        <div className="absolute top-12 left-0 right-0 bg-white border border-slate-100 rounded-xl shadow-xl z-50 overflow-hidden">
                                             {searchResults.map(s => (
                                                 <div key={s.id} onClick={() => { 
                                                     if(!stocks.find(i=>i.id===s.id)) setStocks([...stocks, s]);
                                                     setSelectedSymbol(s.id); 
                                                     setSearchQuery(''); 
                                                 }} className="px-4 py-3 hover:bg-emerald-50 cursor-pointer flex justify-between items-center border-b border-slate-50 last:border-none">
-                                                    <span className="text-sm font-bold">{s.name} <span className="text-[10px] text-slate-400 ml-1">{s.id}</span></span>
-                                                    <i className="fa-solid fa-plus text-emerald-400"></i>
+                                                    <span className="text-xs font-bold">{s.name} <span className="text-[9px] text-slate-400 ml-1">{s.id}</span></span>
+                                                    <i className="fa-solid fa-plus text-emerald-400 text-[10px]"></i>
                                                 </div>
                                             ))}
                                         </div>
                                     )}
                                 </div>
 
-                                {/* Stock Selector Tabs */}
-                                <div className="flex gap-2 overflow-x-auto no-scrollbar py-2">
+                                <div className="flex gap-2 overflow-x-auto no-scrollbar">
                                     {stocks.map(s => (
                                         <button 
                                             key={s.id} 
                                             onClick={() => setSelectedSymbol(s.id)}
-                                            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex-shrink-0 ${selectedSymbol === s.id ? 'bg-emerald-500 text-white shadow-md shadow-emerald-100' : 'bg-slate-100 text-slate-400'}`}
+                                            className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all flex-shrink-0 ${selectedSymbol === s.id ? 'bg-emerald-500 text-white' : 'bg-slate-50 text-slate-400'}`}
                                         >
                                             {s.name}
                                         </button>
                                     ))}
                                 </div>
 
-                                {/* Chart Card */}
-                                <div className="bg-white border border-slate-100 rounded-3xl p-5 shadow-sm">
-                                    <div className="flex justify-between items-end mb-6">
+                                <div className="bg-white border border-slate-100 rounded-2xl p-5">
+                                    <div className="flex justify-between items-end mb-4">
                                         <div>
-                                            <p className="text-[11px] font-bold text-slate-400 mb-1 uppercase tracking-widest">{selectedSymbol}</p>
-                                            <h3 className="text-xl font-black text-slate-800 tabular-nums leading-none">{formatMoney(currentPrice, selectedStockInfo?.market)}</h3>
+                                            <p className="text-[9px] font-bold text-slate-300 uppercase tracking-widest">{selectedSymbol}</p>
+                                            <h3 className="text-lg font-black text-slate-800 tabular-nums">{formatMoney(currentPrice, selectedStockInfo?.market)}</h3>
                                         </div>
-                                        <div className="text-right">
-                                            <span className="text-[10px] font-black text-emerald-500 bg-emerald-50 px-2 py-1 rounded-lg">LIVE</span>
-                                        </div>
+                                        <span className="text-[9px] font-black text-emerald-500 bg-emerald-50 px-1.5 py-0.5 rounded">LIVE</span>
                                     </div>
-                                    
-                                    <div className="h-48 w-full">
+                                    <div className="h-40 w-full">
                                         <ResponsiveContainer width="100%" height="100%">
                                             <AreaChart data={prices[selectedSymbol]}>
                                                 <defs>
-                                                    <linearGradient id="colorP" x1="0" y1="0" x2="0" y2="1">
-                                                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.2}/>
+                                                    <linearGradient id="colorG" x1="0" y1="0" x2="0" y2="1">
+                                                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.1}/>
                                                         <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
                                                     </linearGradient>
                                                 </defs>
-                                                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                                                <CartesianGrid strokeDasharray="3 3" stroke="#f8fafc" vertical={false} />
                                                 <XAxis dataKey="time" hide />
                                                 <YAxis hide domain={['auto', 'auto']} />
-                                                <Tooltip contentStyle={{borderRadius:'12px', border:'none', boxShadow:'0 4px 6px -1px rgb(0 0 0 / 0.1)'}} />
-                                                {userPos && <ReferenceLine y={userPos.avgPrice} stroke="#f59e0b" strokeDasharray="3 3" label={{ position:'right', value:'평단', fill:'#f59e0b', fontSize:10 }} />}
-                                                <Area type="monotone" dataKey="price" stroke="#10b981" strokeWidth={2} fill="url(#colorP)" isAnimationActive={false} />
+                                                {userPos && <ReferenceLine y={userPos.avgPrice} stroke="#fbbf24" strokeDasharray="3 3" />}
+                                                <Area type="monotone" dataKey="price" stroke="#10b981" strokeWidth={1.5} fill="url(#colorG)" isAnimationActive={false} />
                                             </AreaChart>
                                         </ResponsiveContainer>
                                     </div>
                                 </div>
 
-                                {/* Trading Tools */}
-                                <div className="grid grid-cols-1 gap-4">
-                                    <div className="bg-slate-50 rounded-3xl p-5 flex items-center justify-between">
-                                        <button onClick={()=>setTradeQuantity(q=>Math.max(1,q-1))} className="w-10 h-10 bg-white rounded-xl shadow-sm text-slate-400 active:scale-90 transition-all"><i className="fa-solid fa-minus"></i></button>
+                                <div className="space-y-3">
+                                    <div className="bg-slate-50 rounded-xl p-4 flex items-center justify-between">
+                                        <button onClick={()=>setTradeQuantity(q=>Math.max(1,q-1))} className="w-8 h-8 bg-white rounded-lg shadow-sm text-slate-400 text-xs">-</button>
                                         <div className="text-center">
-                                            <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">수량설정</p>
-                                            <input type="number" value={tradeQuantity} onChange={e=>setTradeQuantity(parseInt(e.target.value)||1)} className="bg-transparent text-lg font-black text-slate-800 outline-none w-16 text-center tabular-nums" />
+                                            <input type="number" value={tradeQuantity} onChange={e=>setTradeQuantity(parseInt(e.target.value)||1)} className="bg-transparent text-sm font-black text-slate-800 outline-none w-12 text-center tabular-nums" />
+                                            <p className="text-[8px] font-bold text-slate-300 uppercase">Quantity</p>
                                         </div>
-                                        <button onClick={()=>setTradeQuantity(q=>q+1)} className="w-10 h-10 bg-white rounded-xl shadow-sm text-slate-400 active:scale-90 transition-all"><i className="fa-solid fa-plus"></i></button>
+                                        <button onClick={()=>setTradeQuantity(q=>q+1)} className="w-8 h-8 bg-white rounded-lg shadow-sm text-slate-400 text-xs">+</button>
                                     </div>
-                                    <div className="grid grid-cols-2 gap-3">
-                                        <button onClick={()=>handleTrade('BUY')} className="h-14 rounded-2xl bg-emerald-500 text-white font-bold text-sm active:scale-95 transition-all shadow-lg shadow-emerald-100">매수하기</button>
-                                        <button onClick={()=>handleTrade('SELL')} className="h-14 rounded-2xl bg-slate-800 text-white font-bold text-sm active:scale-95 transition-all shadow-lg shadow-slate-200">매도하기</button>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <button onClick={()=>handleTrade('BUY')} className="py-3 rounded-xl bg-emerald-500 text-white font-bold text-xs active:scale-95 transition-all">Buy</button>
+                                        <button onClick={()=>handleTrade('SELL')} className="py-3 rounded-xl bg-slate-800 text-white font-bold text-xs active:scale-95 transition-all">Sell</button>
                                     </div>
                                 </div>
                             </div>
                         )}
 
                         {activeTab === 'history' && (
-                            <div className="space-y-3 animate-fade-in">
-                                <h3 className="font-bold text-slate-800 mb-4">최근 거래 내역</h3>
-                                {history.length === 0 ? <p className="text-center py-20 text-slate-400 text-sm">기록이 없습니다.</p> : (
-                                    history.map(h => (
-                                        <div key={h.id} className="bg-white border border-slate-100 p-4 rounded-2xl flex justify-between items-center">
-                                            <div className="flex items-center gap-3">
-                                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-[10px] font-bold ${h.type === 'BUY' ? 'bg-emerald-50 text-emerald-500':'bg-slate-100 text-slate-500'}`}>
-                                                    {h.type === 'BUY' ? '매수' : '매도'}
+                            <div className="space-y-4">
+                                <h3 className="text-xs font-bold text-slate-800 uppercase border-b border-slate-50 pb-2">History</h3>
+                                {history.length === 0 ? <p className="text-center py-12 text-slate-300 text-xs">No records found.</p> : (
+                                    <ul className="divide-y divide-slate-50">
+                                        {history.map(h => (
+                                            <li key={h.id} className="py-3 flex justify-between items-center">
+                                                <div className="flex items-center gap-3">
+                                                    <span className={`text-[9px] font-black px-1.5 py-0.5 rounded ${h.type === 'BUY' ? 'bg-emerald-50 text-emerald-500':'bg-slate-50 text-slate-400'}`}>
+                                                        {h.type === 'BUY' ? 'BUY' : 'SELL'}
+                                                    </span>
+                                                    <div>
+                                                        <p className="text-xs font-bold text-slate-800">{stocks.find(s=>s.id===h.symbol)?.name}</p>
+                                                        <p className="text-[9px] text-slate-300">{new Date(h.timestamp).toLocaleDateString()}</p>
+                                                    </div>
                                                 </div>
-                                                <div>
-                                                    <p className="text-xs font-bold">{stocks.find(s=>s.id===h.symbol)?.name}</p>
-                                                    <p className="text-[10px] text-slate-400">{new Date(h.timestamp).toLocaleDateString()}</p>
+                                                <div className="text-right font-bold tabular-nums">
+                                                    <p className="text-xs text-slate-800">{h.quantity}주</p>
+                                                    <p className="text-[9px] text-slate-400">{formatMoney(h.price, h.symbol.includes('.') ? 'KR':'US')}</p>
                                                 </div>
-                                            </div>
-                                            <div className="text-right font-bold tabular-nums">
-                                                <p className="text-xs text-slate-800">{h.quantity}주</p>
-                                                <p className="text-[10px] text-slate-400">{formatMoney(h.price, h.symbol.includes('.') ? 'KR':'US')}</p>
-                                            </div>
-                                        </div>
-                                    ))
+                                            </li>
+                                        ))}
+                                    </ul>
                                 )}
                             </div>
                         )}
                     </main>
 
-                    {/* Nav Bar */}
-                    <nav className="fixed bottom-0 max-w-md w-full bg-white border-t border-slate-100 px-6 py-3 flex justify-between items-center z-50 shadow-[0_-10px_20px_-10px_rgba(0,0,0,0.05)]">
-                        <button onClick={()=>setActiveTab('dashboard')} className={`flex flex-col items-center gap-1 w-1/3 transition-all ${activeTab === 'dashboard' ? 'text-emerald-500':'text-slate-300'}`}>
-                            <i className="fa-solid fa-house-chimney text-lg"></i>
-                            <span className="text-[9px] font-bold uppercase">홈</span>
+                    <nav className="fixed bottom-0 max-w-md w-full bg-white/90 backdrop-blur-md border-t border-slate-50 px-8 py-4 flex justify-between items-center z-50">
+                        <button onClick={()=>setActiveTab('dashboard')} className={`text-lg ${activeTab === 'dashboard' ? 'text-emerald-500':'text-slate-200'}`}>
+                            <i className="fa-solid fa-house"></i>
                         </button>
-                        <button onClick={()=>setActiveTab('trade')} className={`flex flex-col items-center gap-1 w-1/3 transition-all ${activeTab === 'trade' ? 'text-emerald-500':'text-slate-300'}`}>
-                            <i className="fa-solid fa-chart-simple text-lg"></i>
-                            <span className="text-[9px] font-bold uppercase">거래</span>
+                        <button onClick={()=>setActiveTab('trade')} className={`text-lg ${activeTab === 'trade' ? 'text-emerald-500':'text-slate-200'}`}>
+                            <i className="fa-solid fa-chart-line"></i>
                         </button>
-                        <button onClick={()=>setActiveTab('history')} className={`flex flex-col items-center gap-1 w-1/3 transition-all ${activeTab === 'history' ? 'text-emerald-500':'text-slate-300'}`}>
-                            <i className="fa-solid fa-clock-rotate-left text-lg"></i>
-                            <span className="text-[9px] font-bold uppercase">내역</span>
+                        <button onClick={()=>setActiveTab('history')} className={`text-lg ${activeTab === 'history' ? 'text-emerald-500':'text-slate-200'}`}>
+                            <i className="fa-solid fa-clock-rotate-left"></i>
                         </button>
                     </nav>
                 </div>
