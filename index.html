@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>V-STOCK KR: 초고속 스마트 검색</title>
+    <title>V-STOCK 글로벌: KR & US 통합</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&display=swap" rel="stylesheet" />
@@ -27,75 +27,50 @@
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect, useMemo, useCallback } = React;
-        const { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } = window.Recharts;
+        const { useState, useEffect, useMemo } = React;
+        const { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } = window.Recharts;
 
-        const formatKRW = (v) => new Intl.NumberFormat('ko-KR', { style: 'currency', currency: 'KRW' }).format(v || 0);
+        const formatCurrency = (v, symbol = 'KRW') => {
+            return new Intl.NumberFormat(symbol === 'KRW' ? 'ko-KR' : 'en-US', { 
+                style: 'currency', 
+                currency: symbol 
+            }).format(v || 0);
+        };
+
         const formatPercent = (v) => `${v > 0 ? '+' : ''}${(v || 0).toFixed(2)}%`;
 
         const DEFAULT_STOCKS = [
             { id: '005930.KS', name: '삼성전자', color: '#0058CB' },
-            { id: '000660.KS', name: 'SK하이닉스', color: '#EA002C' },
-            { id: '035720.KS', name: '카카오', color: '#FAE100' },
-            { id: '005380.KS', name: '현대차', color: '#002C5F' }
-        ];
-
-        // 🚀 초고속 검색을 위한 로컬 종목 데이터베이스 (Top 60)
-        const LOCAL_STOCK_DB = [
-            {id: "005930.KS", name: "삼성전자", ex: "코스피"}, {id: "000660.KS", name: "SK하이닉스", ex: "코스피"},
-            {id: "373220.KS", name: "LG에너지솔루션", ex: "코스피"}, {id: "207940.KS", name: "삼성바이오로직스", ex: "코스피"},
-            {id: "005380.KS", name: "현대차", ex: "코스피"}, {id: "000270.KS", name: "기아", ex: "코스피"},
-            {id: "068270.KS", name: "셀트리온", ex: "코스피"}, {id: "005490.KS", name: "POSCO홀딩스", ex: "코스피"},
-            {id: "035420.KS", name: "NAVER", ex: "코스피"}, {id: "035420.KS", name: "네이버", ex: "코스피"},
-            {id: "051910.KS", name: "LG화학", ex: "코스피"}, {id: "000810.KS", name: "삼성화재", ex: "코스피"},
-            {id: "035720.KS", name: "카카오", ex: "코스피"}, {id: "006400.KS", name: "삼성SDI", ex: "코스피"},
-            {id: "105560.KS", name: "KB금융", ex: "코스피"}, {id: "055550.KS", name: "신한지주", ex: "코스피"},
-            {id: "012330.KS", name: "현대모비스", ex: "코스피"}, {id: "032830.KS", name: "삼성생명", ex: "코스피"},
-            {id: "086520.KQ", name: "에코프로", ex: "코스닥"}, {id: "247540.KQ", name: "에코프로비엠", ex: "코스닥"},
-            {id: "086960.KQ", name: "HLB", ex: "코스닥"}, {id: "028300.KQ", name: "알테오젠", ex: "코스닥"},
-            {id: "066970.KQ", name: "엘앤에프", ex: "코스닥"}, {id: "035900.KQ", name: "JYP Ent.", ex: "코스닥"},
-            {id: "042700.KS", name: "한미반도체", ex: "코스피"}, {id: "003670.KS", name: "포스코퓨처엠", ex: "코스피"},
-            {id: "011200.KS", name: "HMM", ex: "코스피"}, {id: "034020.KS", name: "두산에너빌리티", ex: "코스피"},
-            {id: "010130.KS", name: "고려아연", ex: "코스피"}, {id: "022100.KS", name: "포스코인터내셔널", ex: "코스피"},
-            {id: "015760.KS", name: "한국전력", ex: "코스피"}, {id: "034730.KS", name: "SK", ex: "코스피"},
-            {id: "033780.KS", name: "KT&G", ex: "코스피"}, {id: "000100.KS", name: "유한양행", ex: "코스피"},
-            {id: "018260.KS", name: "삼성SDS", ex: "코스피"}, {id: "090430.KS", name: "아모레퍼시픽", ex: "코스피"},
-            {id: "010950.KS", name: "S-Oil", ex: "코스피"}, {id: "011170.KS", name: "롯데지주", ex: "코스피"},
-            {id: "323410.KS", name: "카카오뱅크", ex: "코스피"}, {id: "316140.KS", name: "우리금융지주", ex: "코스피"},
-            {id: "024110.KS", name: "기업은행", ex: "코스피"}, {id: "352820.KS", name: "하이브", ex: "코스피"},
-            {id: "259960.KS", name: "크래프톤", ex: "코스피"}, {id: "017670.KS", name: "SK텔레콤", ex: "코스피"},
-            {id: "030200.KS", name: "KT", ex: "코스피"}, {id: "032640.KS", name: "LG유플러스", ex: "코스피"},
-            {id: "036570.KS", name: "엔씨소프트", ex: "코스피"}, {id: "251270.KS", name: "넷마블", ex: "코스피"},
-            {id: "192820.KS", name: "코스맥스", ex: "코스피"}, {id: "271560.KS", name: "오리온", ex: "코스피"}
+            { id: 'TSLA', name: '테슬라', color: '#E81D23' },
+            { id: 'NVDA', name: '엔비디아', color: '#76B900' },
+            { id: '035720.KS', name: '카카오', color: '#FAE100' }
         ];
 
         const PROXY_BASE = "https://api.allorigins.win/raw?url=";
 
         const App = () => {
-            const [stocks, setStocks] = useState(() => JSON.parse(localStorage.getItem('vstock_list')) || DEFAULT_STOCKS);
-            const [balance, setBalance] = useState(() => JSON.parse(localStorage.getItem('vstock_kr_balance')) || 100000000);
-            const [portfolio, setPortfolio] = useState(() => JSON.parse(localStorage.getItem('vstock_kr_portfolio')) || []);
-            const [history, setHistory] = useState(() => JSON.parse(localStorage.getItem('vstock_kr_history')) || []);
+            const [stocks, setStocks] = useState(() => JSON.parse(localStorage.getItem('vstock_list_v2')) || DEFAULT_STOCKS);
+            const [balance, setBalance] = useState(() => JSON.parse(localStorage.getItem('vstock_kr_balance_v2')) || 100000000);
+            const [portfolio, setPortfolio] = useState(() => JSON.parse(localStorage.getItem('vstock_kr_portfolio_v2')) || []);
+            const [history, setHistory] = useState(() => JSON.parse(localStorage.getItem('vstock_kr_history_v2')) || []);
             
             const [selectedSymbol, setSelectedSymbol] = useState(stocks[0]?.id || '');
             const [tradeQuantity, setTradeQuantity] = useState(1);
             const [activeTab, setActiveTab] = useState('dashboard');
             const [prices, setPrices] = useState({});
             
-            // 검색 관련 상태
             const [isAdding, setIsAdding] = useState(false);
             const [searchQuery, setSearchQuery] = useState('');
             const [searchResults, setSearchResults] = useState([]);
             const [isSearching, setIsSearching] = useState(false);
 
             useEffect(() => {
-                localStorage.setItem('vstock_list', JSON.stringify(stocks));
-                localStorage.setItem('vstock_kr_balance', JSON.stringify(balance));
-                localStorage.setItem('vstock_kr_portfolio', JSON.stringify(portfolio));
-                localStorage.setItem('vstock_kr_history', JSON.stringify(history));
+                localStorage.setItem('vstock_list_v2', JSON.stringify(stocks));
+                localStorage.setItem('vstock_kr_balance_v2', JSON.stringify(balance));
+                localStorage.setItem('vstock_kr_portfolio_v2', JSON.stringify(portfolio));
+                localStorage.setItem('vstock_kr_history_v2', JSON.stringify(history));
             }, [stocks, balance, portfolio, history]);
 
-            // 실시간 주가 페칭
             const fetchPrices = async () => {
                 try {
                     const results = await Promise.all(stocks.map(async (s) => {
@@ -123,66 +98,78 @@
                 return () => clearInterval(timer);
             }, [stocks]);
 
-            // 🚀 하이브리드 검색 기능 (로컬 즉시 검색 + API 검색)
+            // 🚀 글로벌 통합 검색 (KR & US)
             useEffect(() => {
-                if (!searchQuery.trim()) {
+                if (searchQuery.length < 2) {
                     setSearchResults([]);
-                    setIsSearching(false);
                     return;
                 }
-
-                // 1단계: 로컬 DB에서 초고속 검색 (타자 치는 즉시 나옴)
-                const localResults = LOCAL_STOCK_DB.filter(s => 
-                    s.name.includes(searchQuery) || s.id.includes(searchQuery)
-                );
-                setSearchResults(localResults);
-
-                // 2단계: 로컬에 없는 종목을 위한 야후 API 우회 검색 (0.8초 디바운스)
                 const delayDebounceFn = setTimeout(async () => {
                     setIsSearching(true);
                     try {
                         const url = `https://query2.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(searchQuery)}&quotesCount=10`;
                         const res = await fetch(PROXY_BASE + encodeURIComponent(url));
-                        if (res.ok) {
-                            const data = await res.json();
-                            const externalResults = data.quotes
-                                .filter(q => q.symbol.endsWith('.KS') || q.symbol.endsWith('.KQ'))
-                                .map(q => ({
-                                    id: q.symbol,
-                                    name: q.shortname || q.longname || q.symbol,
-                                    ex: q.symbol.endsWith('.KS') ? '코스피' : '코스닥'
-                                }));
-                            
-                            // 로컬 결과와 외부 결과를 중복 없이 합침
-                            setSearchResults(prev => {
-                                const merged = [...prev];
-                                externalResults.forEach(ext => {
-                                    if (!merged.find(p => p.id === ext.id)) {
-                                        merged.push(ext);
-                                    }
-                                });
-                                return merged;
-                            });
-                        }
-                    } catch (e) { console.error("외부 검색 오류", e); }
+                        const data = await res.json();
+                        const results = data.quotes.map(q => ({
+                            id: q.symbol,
+                            name: q.shortname || q.longname || q.symbol,
+                            ex: q.exchDisp
+                        }));
+                        setSearchResults(results);
+                    } catch (e) { console.error("검색 실패", e); }
                     setIsSearching(false);
-                }, 800); 
-
+                }, 600);
                 return () => clearTimeout(delayDebounceFn);
             }, [searchQuery]);
 
+            // 🚀 엑셀(CSV) 백업 기능
+            const exportToExcel = () => {
+                let csvContent = "\uFEFF"; // 한글 깨짐 방지용 BOM
+                
+                // 1. 자산 요약
+                csvContent += "구분,금액\n";
+                csvContent += `총 자산,${balance + portfolio.reduce((s, i) => s + (i.quantity * (prices[i.symbol]?.[prices[i.symbol].length-1].price || 0)), 0)}\n`;
+                csvContent += `가용 현금,${balance}\n\n`;
+
+                // 2. 보유 종목
+                csvContent += "종목명,심볼,보유량,평단가,현재가,수익률\n";
+                portfolio.forEach(i => {
+                    const s = stocks.find(st => st.id === i.symbol);
+                    const cp = prices[i.symbol]?.[prices[i.symbol].length-1].price || i.avgPrice;
+                    const prof = ((cp - i.avgPrice) / i.avgPrice * 100).toFixed(2);
+                    csvContent += `${s?.name || i.symbol},${i.symbol},${i.quantity},${i.avgPrice},${cp},${prof}%\n`;
+                });
+                csvContent += "\n";
+
+                // 3. 거래 내역
+                csvContent += "날짜,종목,구분,가격,수량\n";
+                history.forEach(tx => {
+                    const s = stocks.find(st => st.id === tx.symbol);
+                    csvContent += `${new Date(tx.timestamp).toLocaleString()},${s?.name || tx.symbol},${tx.type === 'BUY' ? '매수':'매도'},${tx.price},${tx.quantity}\n`;
+                });
+
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const link = document.createElement("a");
+                const url = URL.createObjectURL(blob);
+                link.setAttribute("href", url);
+                link.setAttribute("download", `V-STOCK_백업_${new Date().toLocaleDateString()}.csv`);
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            };
+
             const addStockFromSearch = (s) => {
-                if (stocks.find(item => item.id === s.id)) return alert('이미 리스트에 추가되어 있습니다!');
-                const colors = ['#F59E0B', '#10B981', '#3B82F6', '#8B5CF6', '#EC4899', '#00D1FF', '#FF4560'];
-                const newStock = { id: s.id, name: s.name, color: colors[stocks.length % colors.length] };
-                setStocks([...stocks, newStock]);
+                if (stocks.find(item => item.id === s.id)) return alert('이미 추가된 종목입니다.');
+                const colors = ['#F59E0B', '#10B981', '#3B82F6', '#8B5CF6', '#EC4899', '#00D1FF'];
+                setStocks([...stocks, { ...s, color: colors[stocks.length % colors.length] }]);
                 setIsAdding(false);
                 setSearchQuery('');
                 setSelectedSymbol(s.id);
             };
 
             const deleteStock = (id) => {
-                if (portfolio.find(p => p.symbol === id)) return alert('보유 중인 주식은 리스트에서 삭제할 수 없습니다.');
+                if (portfolio.find(p => p.symbol === id)) return alert('보유 중인 주식은 삭제 불가!');
                 setStocks(stocks.filter(s => s.id !== id));
             };
 
@@ -195,87 +182,75 @@
             const totalStockValue = portfolio.reduce((s, i) => s + (i.quantity * (currentPricesMap[i.symbol] || 0)), 0);
             const totalAssets = balance + totalStockValue;
 
-            const handleTrade = (type) => {
-                const price = currentPricesMap[selectedSymbol];
-                if (!price) return alert('시세를 불러오는 중입니다. 잠시만 기다려주세요.');
-                const cost = price * tradeQuantity;
-                
-                if (type === 'BUY') {
-                    if (balance < cost) return alert('잔고 부족!');
-                    setBalance(b => b - cost);
-                    setPortfolio(p => {
-                        const exist = p.find(i => i.symbol === selectedSymbol);
-                        if (exist) return p.map(i => i.symbol === selectedSymbol ? {...i, quantity: i.quantity + tradeQuantity, avgPrice: ((i.avgPrice * i.quantity) + cost) / (i.quantity + tradeQuantity)} : i);
-                        return [...p, { symbol: selectedSymbol, quantity: tradeQuantity, avgPrice: price }];
-                    });
-                } else {
-                    const exist = portfolio.find(i => i.symbol === selectedSymbol);
-                    if (!exist || exist.quantity < tradeQuantity) return alert('보유 수량이 부족합니다!');
-                    setBalance(b => b + cost);
-                    setPortfolio(p => {
-                        const nq = exist.quantity - tradeQuantity;
-                        return nq === 0 ? p.filter(i => i.symbol !== selectedSymbol) : p.map(i => i.symbol === selectedSymbol ? {...i, quantity: nq} : i);
-                    });
-                }
-                setHistory(h => [{id: Math.random(), type, symbol: selectedSymbol, price, quantity: tradeQuantity, timestamp: Date.now()}, ...h]);
-            };
-
             return (
                 <div className="min-h-screen bg-[#0F1115] text-slate-200 font-sans pb-24">
                     <header className="sticky top-0 z-50 border-b border-white/5 bg-[#0F1115]/90 backdrop-blur-md px-4 h-16 flex items-center justify-between">
                         <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-                                <i className="fa-solid fa-magnifying-glass-chart text-white text-sm"></i>
+                            <div className="w-8 h-8 bg-emerald-600 rounded-lg flex items-center justify-center shadow-lg">
+                                <i className="fa-solid fa-earth-americas text-white text-sm"></i>
                             </div>
-                            <h1 className="text-xl font-black">V-STOCK SMART</h1>
+                            <h1 className="text-xl font-black">V-STOCK GLOBAL</h1>
                         </div>
-                        <button onClick={() => { if(confirm('모든 데이터를 리셋할까요?')) {localStorage.clear(); location.reload();} }} className="text-slate-500 hover:text-white"><i className="fa-solid fa-rotate-right"></i></button>
+                        <div className="flex gap-2">
+                            <button onClick={exportToExcel} className="w-10 h-10 bg-emerald-500/10 text-emerald-500 rounded-full flex items-center justify-center hover:bg-emerald-500/20 active:scale-90 transition-all" title="엑셀 백업">
+                                <i className="fa-solid fa-file-excel"></i>
+                            </button>
+                            <button onClick={() => { if(confirm('리셋할까요?')) {localStorage.clear(); location.reload();} }} className="w-10 h-10 text-slate-500 hover:text-white flex items-center justify-center"><i className="fa-solid fa-rotate-right"></i></button>
+                        </div>
                     </header>
 
                     <main className="max-w-5xl mx-auto px-4 py-6">
-                        {/* Summary */}
+                        {/* Summary Cards */}
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
                             <div className="bg-[#1A1D23] p-5 rounded-2xl border border-white/5 shadow-xl">
-                                <p className="text-xs font-bold text-slate-500 mb-1 tracking-widest">TOTAL ASSETS</p>
+                                <p className="text-[10px] font-black text-slate-500 mb-1 tracking-widest uppercase text-emerald-500">Total Net Worth</p>
                                 <p className="text-2xl font-black text-white">{formatKRW(totalAssets)}</p>
                                 <p className={`text-sm font-bold mt-1 ${totalAssets >= 100000000 ? 'text-emerald-400' : 'text-rose-400'}`}>
                                     {formatPercent(((totalAssets - 100000000) / 100000000) * 100)}
                                 </p>
                             </div>
                             <div className="bg-[#1A1D23] p-5 rounded-2xl border border-white/5 shadow-xl">
-                                <p className="text-xs font-bold text-slate-500 mb-1 tracking-widest">AVAILABLE CASH</p>
+                                <p className="text-[10px] font-black text-slate-500 mb-1 tracking-widest uppercase">Available Cash</p>
                                 <p className="text-2xl font-black text-white">{formatKRW(balance)}</p>
                             </div>
                             <div className="bg-[#1A1D23] p-5 rounded-2xl border border-white/5 shadow-xl">
-                                <p className="text-xs font-bold text-slate-500 mb-1 tracking-widest">HOLDINGS</p>
-                                <p className="text-2xl font-black text-white">{portfolio.length} 종목</p>
+                                <p className="text-[10px] font-black text-slate-500 mb-1 tracking-widest uppercase">Active Positions</p>
+                                <p className="text-2xl font-black text-white">{portfolio.length} Stocks</p>
                             </div>
                         </div>
 
                         {activeTab === 'dashboard' && (
                             <div className="animate-fade-in space-y-6">
-                                <h2 className="text-lg font-bold px-1">실시간 포트폴리오</h2>
+                                <h2 className="text-lg font-bold px-1 flex items-center gap-2">
+                                    <i className="fa-solid fa-chart-line text-blue-500"></i> 포트폴리오 현황
+                                </h2>
                                 <div className="bg-[#1A1D23] rounded-2xl border border-white/5 overflow-hidden">
                                     {portfolio.length === 0 ? <p className="p-20 text-center text-slate-600 font-bold">보유 중인 주식이 없습니다.</p> : (
-                                        <table className="w-full text-left">
-                                            <thead className="bg-white/5 text-[10px] text-slate-400 uppercase tracking-widest">
-                                                <tr><th className="px-6 py-4">종목</th><th className="px-6 py-4">수량</th><th className="px-6 py-4">평단가</th><th className="px-6 py-4 text-right">수익률</th></tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-white/5">
-                                                {portfolio.map(i => {
-                                                    const cp = currentPricesMap[i.symbol] || i.avgPrice;
-                                                    const prof = (cp - i.avgPrice) / i.avgPrice * 100;
-                                                    return (
-                                                        <tr key={i.symbol} className="hover:bg-white/5 cursor-pointer" onClick={() => {setSelectedSymbol(i.symbol); setActiveTab('trade');}}>
-                                                            <td className="px-6 py-4 font-black text-white">{stocks.find(st => st.id === i.symbol)?.name || i.symbol}</td>
-                                                            <td className="px-6 py-4 font-bold text-slate-300">{i.quantity}</td>
-                                                            <td className="px-6 py-4 text-slate-400 font-bold">{formatKRW(i.avgPrice)}</td>
-                                                            <td className={`px-6 py-4 text-right font-black ${prof >= 0 ? 'text-emerald-400':'text-rose-400'}`}>{formatPercent(prof)}</td>
-                                                        </tr>
-                                                    );
-                                                })}
-                                            </tbody>
-                                        </table>
+                                        <div className="overflow-x-auto">
+                                            <table className="w-full text-left min-w-[500px]">
+                                                <thead className="bg-white/5 text-[10px] text-slate-400 uppercase tracking-widest border-b border-white/10">
+                                                    <tr><th className="px-6 py-4">종목</th><th className="px-6 py-4">수량</th><th className="px-6 py-4">평단가</th><th className="px-6 py-4 text-right">수익률</th></tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-white/5">
+                                                    {portfolio.map(i => {
+                                                        const cp = currentPricesMap[i.symbol] || i.avgPrice;
+                                                        const prof = (cp - i.avgPrice) / i.avgPrice * 100;
+                                                        const isUS = !i.symbol.includes('.');
+                                                        return (
+                                                            <tr key={i.symbol} className="hover:bg-white/5 cursor-pointer" onClick={() => {setSelectedSymbol(i.symbol); setActiveTab('trade');}}>
+                                                                <td className="px-6 py-4 font-black text-white">
+                                                                    {stocks.find(st => st.id === i.symbol)?.name || i.symbol}
+                                                                    <span className="ml-2 text-[10px] text-slate-500">{i.symbol}</span>
+                                                                </td>
+                                                                <td className="px-6 py-4 font-bold">{i.quantity}</td>
+                                                                <td className="px-6 py-4 text-slate-400 font-bold">{isUS ? formatCurrency(i.avgPrice, 'USD') : formatKRW(i.avgPrice)}</td>
+                                                                <td className={`px-6 py-4 text-right font-black ${prof >= 0 ? 'text-emerald-400':'text-rose-400'}`}>{formatPercent(prof)}</td>
+                                                            </tr>
+                                                        );
+                                                    })}
+                                                </tbody>
+                                            </table>
+                                        </div>
                                     )}
                                 </div>
                             </div>
@@ -284,10 +259,9 @@
                         {activeTab === 'trade' && (
                             <div className="animate-fade-in grid grid-cols-1 lg:grid-cols-3 gap-6">
                                 <div className="lg:col-span-2 space-y-4">
-                                    {/* 종목 리스트 탭 */}
                                     <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-2">
-                                        <button onClick={() => {setIsAdding(!isAdding); setSearchQuery('');}} className="px-4 py-3 rounded-xl bg-blue-600 text-white font-black flex-shrink-0 active:scale-95 transition-all shadow-lg shadow-blue-500/20">
-                                            <i className={`fa-solid ${isAdding ? 'fa-xmark' : 'fa-plus'} mr-2`}></i>종목 찾기
+                                        <button onClick={() => {setIsAdding(!isAdding); setSearchQuery('');}} className="px-4 py-3 rounded-xl bg-blue-600 text-white font-black flex-shrink-0 active:scale-95 shadow-lg shadow-blue-500/20">
+                                            <i className={`fa-solid ${isAdding ? 'fa-xmark' : 'fa-magnifying-glass'} mr-2`}></i>검색 추가
                                         </button>
                                         {stocks.map(s => (
                                             <div key={s.id} className="relative group flex-shrink-0">
@@ -299,48 +273,35 @@
                                         ))}
                                     </div>
 
-                                    {/* 🚀 스마트 검색창 UI */}
                                     {isAdding && (
-                                        <div className="bg-[#1E222A] border border-blue-500/50 p-4 rounded-2xl animate-fade-in relative z-10 shadow-2xl">
+                                        <div className="bg-[#1E222A] border border-blue-500/40 p-4 rounded-2xl animate-fade-in relative z-10 shadow-2xl">
                                             <div className="relative">
-                                                <i className="fa-solid fa-magnifying-glass absolute left-4 top-3.5 text-slate-400"></i>
-                                                <input 
-                                                    type="text" 
-                                                    autoFocus
-                                                    placeholder="종목명 입력 (예: 삼성전자, 네이버, 카카오)" 
-                                                    value={searchQuery} 
-                                                    onChange={e=>setSearchQuery(e.target.value)} 
-                                                    className="w-full bg-[#0F1115] border border-white/10 rounded-xl pl-11 pr-4 py-3 text-sm font-bold text-white outline-none focus:border-blue-500 transition-all" 
-                                                />
+                                                <i className="fa-solid fa-search absolute left-4 top-3.5 text-slate-400"></i>
+                                                <input type="text" autoFocus placeholder="삼성전자, Tesla, 엔비디아..." value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} className="w-full bg-[#0F1115] border border-white/10 rounded-xl pl-11 pr-4 py-3 text-sm font-bold text-white outline-none focus:border-blue-500 transition-all" />
                                                 {isSearching && <div className="absolute right-4 top-3.5"><i className="fa-solid fa-circle-notch fa-spin text-blue-500"></i></div>}
                                             </div>
-                                            
                                             {searchResults.length > 0 && (
-                                                <div className="mt-3 bg-[#0F1115] rounded-xl border border-white/5 overflow-hidden max-h-60 overflow-y-auto shadow-inner">
+                                                <div className="mt-3 bg-[#0F1115] rounded-xl border border-white/5 overflow-hidden max-h-60 overflow-y-auto">
                                                     {searchResults.map(s => (
-                                                        <div key={s.id} onClick={() => addStockFromSearch(s)} className="search-item px-5 py-4 cursor-pointer border-b border-white/5 flex justify-between items-center transition-colors">
+                                                        <div key={s.id} onClick={() => addStockFromSearch(s)} className="search-item px-5 py-4 cursor-pointer border-b border-white/5 flex justify-between items-center">
                                                             <div>
-                                                                <p className="font-black text-white text-base">{s.name}</p>
-                                                                <p className="text-[10px] text-slate-500 font-bold uppercase mt-1">{s.id} <span className="mx-1">·</span> {s.ex || s.exchange}</p>
+                                                                <p className="font-black text-white">{s.name}</p>
+                                                                <p className="text-[10px] text-slate-500 font-bold uppercase mt-1">{s.id} · {s.ex}</p>
                                                             </div>
-                                                            <button className="bg-blue-600/20 text-blue-400 w-8 h-8 rounded-full flex items-center justify-center"><i className="fa-solid fa-plus"></i></button>
+                                                            <i className="fa-solid fa-plus text-blue-500"></i>
                                                         </div>
                                                     ))}
                                                 </div>
                                             )}
-                                            {searchQuery.length > 0 && !isSearching && searchResults.length === 0 && (
-                                                <p className="text-sm font-bold text-slate-500 mt-4 mb-2 text-center">검색 결과가 없습니다.</p>
-                                            )}
                                         </div>
                                     )}
 
-                                    {/* 차트 영역 */}
-                                    <div className="bg-[#1A1D23] rounded-2xl border border-white/5 p-6 shadow-2xl mt-4">
+                                    <div className="bg-[#1A1D23] rounded-2xl border border-white/5 p-6 shadow-2xl">
                                         <div className="flex items-end justify-between mb-8">
                                             <div>
-                                                <h2 className="text-sm font-bold text-slate-400 mb-1">{stocks.find(s=>s.id===selectedSymbol)?.name}</h2>
-                                                <h3 className="text-4xl font-black tracking-tighter flex items-baseline gap-2 text-white">
-                                                    {formatKRW(currentPricesMap[selectedSymbol])}
+                                                <h2 className="text-sm font-bold text-slate-400 mb-1 tracking-widest uppercase">{stocks.find(s=>s.id===selectedSymbol)?.name} ({selectedSymbol})</h2>
+                                                <h3 className="text-4xl font-black tracking-tighter text-white">
+                                                    {selectedSymbol.includes('.') ? formatKRW(currentPricesMap[selectedSymbol]) : formatCurrency(currentPricesMap[selectedSymbol], 'USD')}
                                                 </h3>
                                             </div>
                                         </div>
@@ -356,7 +317,7 @@
                                                     <CartesianGrid strokeDasharray="3 3" stroke="#ffffff05" vertical={false} />
                                                     <XAxis dataKey="time" hide />
                                                     <YAxis hide domain={['auto', 'auto']} />
-                                                    <Tooltip contentStyle={{backgroundColor:'#1A1D23', border:'1px solid rgba(255,255,255,0.1)', borderRadius:'12px', boxShadow:'0 10px 15px -3px rgba(0,0,0,0.5)'}} itemStyle={{fontWeight:'bold', color:'#fff'}} />
+                                                    <Tooltip contentStyle={{backgroundColor:'#1A1D23', border:'none', borderRadius:'12px', boxShadow:'0 10px 15px -3px rgba(0,0,0,0.5)'}} itemStyle={{fontWeight:'bold', color:'#fff'}} />
                                                     <Area type="monotone" dataKey="price" stroke={stocks.find(s=>s.id===selectedSymbol)?.color} strokeWidth={4} fill="url(#colorP)" isAnimationActive={false} />
                                                 </AreaChart>
                                             </ResponsiveContainer>
@@ -364,20 +325,19 @@
                                     </div>
                                 </div>
 
-                                {/* 매수/매도 영역 */}
                                 <div className="space-y-4">
                                     <div className="bg-[#1A1D23] rounded-2xl border border-white/5 p-6 space-y-6 shadow-xl">
                                         <div>
-                                            <label className="text-[10px] font-black text-slate-500 mb-4 block uppercase tracking-[0.2em]">Quantity Control</label>
+                                            <label className="text-[10px] font-black text-slate-500 mb-4 block uppercase tracking-widest">Order Quantity</label>
                                             <div className="flex items-center gap-3">
-                                                <button onClick={() => setTradeQuantity(q => Math.max(1, q - 1))} className="w-14 h-14 rounded-2xl bg-white/5 hover:bg-white/10 flex items-center justify-center transition-all"><i className="fa-solid fa-minus"></i></button>
-                                                <input type="number" value={tradeQuantity} onChange={e=>setTradeQuantity(Math.max(1, parseInt(e.target.value)||1))} className="flex-1 bg-white/5 rounded-2xl h-14 text-center text-2xl font-black text-white outline-none focus:bg-white/10 transition-all" />
-                                                <button onClick={() => setTradeQuantity(q => q + 1)} className="w-14 h-14 rounded-2xl bg-white/5 flex items-center justify-center hover:bg-white/10 transition-all"><i className="fa-solid fa-plus"></i></button>
+                                                <button onClick={() => setTradeQuantity(q => Math.max(1, q - 1))} className="w-14 h-14 rounded-2xl bg-white/5 flex items-center justify-center transition-all"><i className="fa-solid fa-minus"></i></button>
+                                                <input type="number" value={tradeQuantity} onChange={e=>setTradeQuantity(Math.max(1, parseInt(e.target.value)||1))} className="flex-1 bg-white/5 rounded-2xl h-14 text-center text-2xl font-black outline-none" />
+                                                <button onClick={() => setTradeQuantity(q => q + 1)} className="w-14 h-14 rounded-2xl bg-white/5 flex items-center justify-center"><i className="fa-solid fa-plus"></i></button>
                                             </div>
                                         </div>
                                         <div className="grid grid-cols-2 gap-3">
-                                            <button onClick={()=>handleTrade('BUY')} className="h-16 rounded-[20px] bg-emerald-500 text-[#0F1115] font-black text-xl shadow-lg shadow-emerald-500/20 active:scale-95 transition-all">매수</button>
-                                            <button onClick={()=>handleTrade('SELL')} className="h-16 rounded-[20px] bg-rose-500 text-white font-black text-xl shadow-lg shadow-rose-500/20 active:scale-95 transition-all">매도</button>
+                                            <button onClick={()=>handleTrade('BUY')} className="h-16 rounded-[20px] bg-emerald-500 text-[#0F1115] font-black text-xl active:scale-95 transition-all">매수</button>
+                                            <button onClick={()=>handleTrade('SELL')} className="h-16 rounded-[20px] bg-rose-500 text-white font-black text-xl active:scale-95 transition-all">매도</button>
                                         </div>
                                     </div>
                                 </div>
@@ -391,7 +351,7 @@
                                     {history.length === 0 ? <p className="p-20 text-center text-slate-600 font-bold">거래 내역이 없습니다.</p> : (
                                         <div className="divide-y divide-white/5">
                                             {history.map(tx => (
-                                                <div key={tx.id} className="p-5 flex justify-between items-center hover:bg-white/5">
+                                                <div key={tx.id} className="p-5 flex justify-between items-center hover:bg-white/5 transition-colors">
                                                     <div className="flex items-center gap-4">
                                                         <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-[10px] ${tx.type === 'BUY' ? 'bg-emerald-500/10 text-emerald-400':'bg-rose-500/10 text-rose-400'}`}>
                                                             {tx.type === 'BUY' ? '매수' : '매도'}
@@ -425,7 +385,8 @@
             );
         };
 
-        ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
     </script>
 </body>
 </html>
