@@ -3,10 +3,10 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>V-STOCK 글로벌: KR & US 통합</title>
+    <title>V-STOCK GLOBAL</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
     
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -16,11 +16,12 @@
     <script src="https://unpkg.com/recharts@2.12.7/umd/Recharts.js"></script>
 
     <style>
-        body { font-family: 'Noto Sans KR', sans-serif; background-color: #0F1115; color: #e2e8f0; margin: 0; padding: 0; }
+        body { font-family: 'Noto Sans KR', sans-serif; background-color: #f8fafc; color: #1e293b; margin: 0; padding: 0; }
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .animate-fade-in { animation: fadeIn 0.3s ease-out forwards; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        .search-item:hover { background-color: rgba(59, 130, 246, 0.15); }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+        .tabular-nums { font-variant-numeric: tabular-nums; }
+        .active-tab { color: #10b981 !important; border-bottom: 2px solid #10b981; }
     </style>
 </head>
 <body>
@@ -28,47 +29,41 @@
 
     <script type="text/babel">
         const { useState, useEffect, useMemo } = React;
-        const { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } = window.Recharts;
+        const { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } = window.Recharts;
 
-        const formatCurrency = (v, symbol = 'KRW') => {
-            return new Intl.NumberFormat(symbol === 'KRW' ? 'ko-KR' : 'en-US', { 
-                style: 'currency', 
-                currency: symbol 
-            }).format(v || 0);
+        const formatMoney = (v, market) => {
+            const locale = market === 'US' ? 'en-US' : 'ko-KR';
+            const currency = market === 'US' ? 'USD' : 'KRW';
+            return new Intl.NumberFormat(locale, { style: 'currency', currency }).format(v || 0);
         };
-
-        const formatPercent = (v) => `${v > 0 ? '+' : ''}${(v || 0).toFixed(2)}%`;
-
-        const DEFAULT_STOCKS = [
-            { id: '005930.KS', name: '삼성전자', color: '#0058CB' },
-            { id: 'TSLA', name: '테슬라', color: '#E81D23' },
-            { id: 'NVDA', name: '엔비디아', color: '#76B900' },
-            { id: '035720.KS', name: '카카오', color: '#FAE100' }
-        ];
 
         const PROXY_BASE = "https://api.allorigins.win/raw?url=";
 
         const App = () => {
-            const [stocks, setStocks] = useState(() => JSON.parse(localStorage.getItem('vstock_list_v2')) || DEFAULT_STOCKS);
-            const [balance, setBalance] = useState(() => JSON.parse(localStorage.getItem('vstock_kr_balance_v2')) || 100000000);
-            const [portfolio, setPortfolio] = useState(() => JSON.parse(localStorage.getItem('vstock_kr_portfolio_v2')) || []);
-            const [history, setHistory] = useState(() => JSON.parse(localStorage.getItem('vstock_kr_history_v2')) || []);
+            const [market, setMarket] = useState('KR'); // KR or US
+            const [stocks, setStocks] = useState(() => JSON.parse(localStorage.getItem('vstock_list_v2')) || [
+                { id: '005930.KS', name: '삼성전자', market: 'KR' },
+                { id: 'TSLA', name: '테슬라', market: 'US' },
+                { id: '035720.KS', name: '카카오', market: 'KR' },
+                { id: 'NVDA', name: '엔비디아', market: 'US' }
+            ]);
+
+            const [balance, setBalance] = useState(() => JSON.parse(localStorage.getItem('vstock_balance_v2')) || 100000000);
+            const [portfolio, setPortfolio] = useState(() => JSON.parse(localStorage.getItem('vstock_portfolio_v2')) || []);
+            const [history, setHistory] = useState(() => JSON.parse(localStorage.getItem('vstock_history_v2')) || []);
             
-            const [selectedSymbol, setSelectedSymbol] = useState(stocks[0]?.id || '');
+            const [selectedSymbol, setSelectedSymbol] = useState(stocks[0].id);
             const [tradeQuantity, setTradeQuantity] = useState(1);
             const [activeTab, setActiveTab] = useState('dashboard');
             const [prices, setPrices] = useState({});
-            
-            const [isAdding, setIsAdding] = useState(false);
             const [searchQuery, setSearchQuery] = useState('');
             const [searchResults, setSearchResults] = useState([]);
-            const [isSearching, setIsSearching] = useState(false);
 
             useEffect(() => {
                 localStorage.setItem('vstock_list_v2', JSON.stringify(stocks));
-                localStorage.setItem('vstock_kr_balance_v2', JSON.stringify(balance));
-                localStorage.setItem('vstock_kr_portfolio_v2', JSON.stringify(portfolio));
-                localStorage.setItem('vstock_kr_history_v2', JSON.stringify(history));
+                localStorage.setItem('vstock_balance_v2', JSON.stringify(balance));
+                localStorage.setItem('vstock_portfolio_v2', JSON.stringify(portfolio));
+                localStorage.setItem('vstock_history_v2', JSON.stringify(history));
             }, [stocks, balance, portfolio, history]);
 
             const fetchPrices = async () => {
@@ -85,301 +80,254 @@
                         results.forEach(r => {
                             if (!r) return;
                             let hist = next[r.id] || Array.from({length: 20}, () => ({time:'', price: r.price}));
-                            next[r.id] = [...hist.slice(1), { time: new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'}), price: r.price }];
+                            next[r.id] = [...hist.slice(1), { time: new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}), price: r.price }];
                         });
                         return next;
                     });
-                } catch (e) { console.error(e); }
+                } catch (e) {}
             };
 
             useEffect(() => {
                 fetchPrices();
-                const timer = setInterval(fetchPrices, 10000);
+                const timer = setInterval(fetchPrices, 15000);
                 return () => clearInterval(timer);
             }, [stocks]);
 
-            // 🚀 글로벌 통합 검색 (KR & US)
+            // 검색 기능
             useEffect(() => {
-                if (searchQuery.length < 2) {
-                    setSearchResults([]);
-                    return;
-                }
-                const delayDebounceFn = setTimeout(async () => {
-                    setIsSearching(true);
-                    try {
-                        const url = `https://query2.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(searchQuery)}&quotesCount=10`;
-                        const res = await fetch(PROXY_BASE + encodeURIComponent(url));
-                        const data = await res.json();
-                        const results = data.quotes.map(q => ({
-                            id: q.symbol,
-                            name: q.shortname || q.longname || q.symbol,
-                            ex: q.exchDisp
-                        }));
-                        setSearchResults(results);
-                    } catch (e) { console.error("검색 실패", e); }
-                    setIsSearching(false);
-                }, 600);
-                return () => clearTimeout(delayDebounceFn);
+                if (searchQuery.length < 2) { setSearchResults([]); return; }
+                const timer = setTimeout(async () => {
+                    const url = `https://query2.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(searchQuery)}&quotesCount=5`;
+                    const res = await fetch(PROXY_BASE + encodeURIComponent(url));
+                    const data = await res.json();
+                    setSearchResults(data.quotes.map(q => ({
+                        id: q.symbol, name: q.shortname || q.symbol, 
+                        market: q.symbol.includes('.') ? 'KR' : 'US'
+                    })));
+                }, 500);
+                return () => clearTimeout(timer);
             }, [searchQuery]);
 
-            // 🚀 엑셀(CSV) 백업 기능
-            const exportToExcel = () => {
-                let csvContent = "\uFEFF"; // 한글 깨짐 방지용 BOM
-                
-                // 1. 자산 요약
-                csvContent += "구분,금액\n";
-                csvContent += `총 자산,${balance + portfolio.reduce((s, i) => s + (i.quantity * (prices[i.symbol]?.[prices[i.symbol].length-1].price || 0)), 0)}\n`;
-                csvContent += `가용 현금,${balance}\n\n`;
-
-                // 2. 보유 종목
-                csvContent += "종목명,심볼,보유량,평단가,현재가,수익률\n";
-                portfolio.forEach(i => {
-                    const s = stocks.find(st => st.id === i.symbol);
-                    const cp = prices[i.symbol]?.[prices[i.symbol].length-1].price || i.avgPrice;
-                    const prof = ((cp - i.avgPrice) / i.avgPrice * 100).toFixed(2);
-                    csvContent += `${s?.name || i.symbol},${i.symbol},${i.quantity},${i.avgPrice},${cp},${prof}%\n`;
+            const exportCSV = () => {
+                let csv = "\ufeff구분,종목,수량,평단가,현재가,수익률\n";
+                portfolio.forEach(p => {
+                    const cur = prices[p.symbol]?.[prices[p.symbol].length-1]?.price || 0;
+                    csv += `보유,${p.symbol},${p.quantity},${p.avgPrice.toFixed(0)},${cur.toFixed(0)},${((cur-p.avgPrice)/p.avgPrice*100).toFixed(2)}%\n`;
                 });
-                csvContent += "\n";
-
-                // 3. 거래 내역
-                csvContent += "날짜,종목,구분,가격,수량\n";
-                history.forEach(tx => {
-                    const s = stocks.find(st => st.id === tx.symbol);
-                    csvContent += `${new Date(tx.timestamp).toLocaleString()},${s?.name || tx.symbol},${tx.type === 'BUY' ? '매수':'매도'},${tx.price},${tx.quantity}\n`;
-                });
-
-                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
                 const link = document.createElement("a");
-                const url = URL.createObjectURL(blob);
-                link.setAttribute("href", url);
-                link.setAttribute("download", `V-STOCK_백업_${new Date().toLocaleDateString()}.csv`);
-                link.style.visibility = 'hidden';
-                document.body.appendChild(link);
+                link.href = URL.createObjectURL(blob);
+                link.download = `투자내역_${new Date().toLocaleDateString()}.csv`;
                 link.click();
-                document.body.removeChild(link);
             };
 
-            const addStockFromSearch = (s) => {
-                if (stocks.find(item => item.id === s.id)) return alert('이미 추가된 종목입니다.');
-                const colors = ['#F59E0B', '#10B981', '#3B82F6', '#8B5CF6', '#EC4899', '#00D1FF'];
-                setStocks([...stocks, { ...s, color: colors[stocks.length % colors.length] }]);
-                setIsAdding(false);
-                setSearchQuery('');
-                setSelectedSymbol(s.id);
-            };
-
-            const deleteStock = (id) => {
-                if (portfolio.find(p => p.symbol === id)) return alert('보유 중인 주식은 삭제 불가!');
-                setStocks(stocks.filter(s => s.id !== id));
-            };
-
-            const currentPricesMap = useMemo(() => {
-                const map = {};
-                Object.keys(prices).forEach(k => { map[k] = prices[k][prices[k].length-1].price; });
-                return map;
-            }, [prices]);
-
-            const totalStockValue = portfolio.reduce((s, i) => s + (i.quantity * (currentPricesMap[i.symbol] || 0)), 0);
-            const totalAssets = balance + totalStockValue;
+            const currentPrice = prices[selectedSymbol]?.[prices[selectedSymbol].length-1]?.price || 0;
+            const selectedStockInfo = stocks.find(s => s.id === selectedSymbol);
+            const userPos = portfolio.find(p => p.symbol === selectedSymbol);
 
             return (
-                <div className="min-h-screen bg-[#0F1115] text-slate-200 font-sans pb-24">
-                    <header className="sticky top-0 z-50 border-b border-white/5 bg-[#0F1115]/90 backdrop-blur-md px-4 h-16 flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 bg-emerald-600 rounded-lg flex items-center justify-center shadow-lg">
-                                <i className="fa-solid fa-earth-americas text-white text-sm"></i>
-                            </div>
-                            <h1 className="text-xl font-black">V-STOCK GLOBAL</h1>
+                <div className="max-w-md mx-auto min-h-screen bg-white shadow-2xl relative">
+                    {/* Header */}
+                    <header className="px-5 py-4 flex justify-between items-center border-b border-slate-100 sticky top-0 bg-white/80 backdrop-blur-md z-50">
+                        <div className="flex items-center gap-2">
+                            <i className="fa-solid fa-chart-line text-emerald-500 text-xl"></i>
+                            <h1 className="text-lg font-bold text-slate-800">V-STOCK</h1>
                         </div>
-                        <div className="flex gap-2">
-                            <button onClick={exportToExcel} className="w-10 h-10 bg-emerald-500/10 text-emerald-500 rounded-full flex items-center justify-center hover:bg-emerald-500/20 active:scale-90 transition-all" title="엑셀 백업">
-                                <i className="fa-solid fa-file-excel"></i>
-                            </button>
-                            <button onClick={() => { if(confirm('리셋할까요?')) {localStorage.clear(); location.reload();} }} className="w-10 h-10 text-slate-500 hover:text-white flex items-center justify-center"><i className="fa-solid fa-rotate-right"></i></button>
+                        <div className="flex gap-4">
+                            <button onClick={exportCSV} className="text-slate-400 hover:text-emerald-500 transition-colors"><i className="fa-solid fa-file-export"></i></button>
+                            <button onClick={() => location.reload()} className="text-slate-400 hover:text-emerald-500 transition-colors"><i className="fa-solid fa-rotate"></i></button>
                         </div>
                     </header>
 
-                    <main className="max-w-5xl mx-auto px-4 py-6">
-                        {/* Summary Cards */}
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-                            <div className="bg-[#1A1D23] p-5 rounded-2xl border border-white/5 shadow-xl">
-                                <p className="text-[10px] font-black text-slate-500 mb-1 tracking-widest uppercase text-emerald-500">Total Net Worth</p>
-                                <p className="text-2xl font-black text-white">{formatKRW(totalAssets)}</p>
-                                <p className={`text-sm font-bold mt-1 ${totalAssets >= 100000000 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                                    {formatPercent(((totalAssets - 100000000) / 100000000) * 100)}
-                                </p>
+                    <main className="p-5 animate-fade-in">
+                        {/* Balance Card */}
+                        <div className="bg-emerald-500 rounded-3xl p-6 text-white shadow-lg shadow-emerald-200 mb-6">
+                            <div className="flex justify-between items-start mb-2">
+                                <span className="text-xs font-medium opacity-80 uppercase tracking-wider">Total Assets</span>
+                                <div className="bg-white/20 px-2 py-1 rounded-lg text-[10px] font-bold">실시간</div>
                             </div>
-                            <div className="bg-[#1A1D23] p-5 rounded-2xl border border-white/5 shadow-xl">
-                                <p className="text-[10px] font-black text-slate-500 mb-1 tracking-widest uppercase">Available Cash</p>
-                                <p className="text-2xl font-black text-white">{formatKRW(balance)}</p>
-                            </div>
-                            <div className="bg-[#1A1D23] p-5 rounded-2xl border border-white/5 shadow-xl">
-                                <p className="text-[10px] font-black text-slate-500 mb-1 tracking-widest uppercase">Active Positions</p>
-                                <p className="text-2xl font-black text-white">{portfolio.length} Stocks</p>
+                            <h2 className="text-xl font-black tabular-nums mb-4">{formatMoney(balance + portfolio.reduce((s,i)=>s+(i.quantity*(prices[i.symbol]?.[prices[i.symbol].length-1]?.price||0)),0), 'KR')}</h2>
+                            <div className="flex gap-4 border-t border-white/10 pt-4">
+                                <div>
+                                    <p className="text-[10px] opacity-70 mb-0.5">가용 현금</p>
+                                    <p className="text-sm font-bold tabular-nums">{formatMoney(balance, 'KR')}</p>
+                                </div>
+                                <div className="border-l border-white/10 pl-4">
+                                    <p className="text-[10px] opacity-70 mb-0.5">보유 종목</p>
+                                    <p className="text-sm font-bold tabular-nums">{portfolio.length}개</p>
+                                </div>
                             </div>
                         </div>
 
                         {activeTab === 'dashboard' && (
-                            <div className="animate-fade-in space-y-6">
-                                <h2 className="text-lg font-bold px-1 flex items-center gap-2">
-                                    <i className="fa-solid fa-chart-line text-blue-500"></i> 포트폴리오 현황
-                                </h2>
-                                <div className="bg-[#1A1D23] rounded-2xl border border-white/5 overflow-hidden">
-                                    {portfolio.length === 0 ? <p className="p-20 text-center text-slate-600 font-bold">보유 중인 주식이 없습니다.</p> : (
-                                        <div className="overflow-x-auto">
-                                            <table className="w-full text-left min-w-[500px]">
-                                                <thead className="bg-white/5 text-[10px] text-slate-400 uppercase tracking-widest border-b border-white/10">
-                                                    <tr><th className="px-6 py-4">종목</th><th className="px-6 py-4">수량</th><th className="px-6 py-4">평단가</th><th className="px-6 py-4 text-right">수익률</th></tr>
-                                                </thead>
-                                                <tbody className="divide-y divide-white/5">
-                                                    {portfolio.map(i => {
-                                                        const cp = currentPricesMap[i.symbol] || i.avgPrice;
-                                                        const prof = (cp - i.avgPrice) / i.avgPrice * 100;
-                                                        const isUS = !i.symbol.includes('.');
-                                                        return (
-                                                            <tr key={i.symbol} className="hover:bg-white/5 cursor-pointer" onClick={() => {setSelectedSymbol(i.symbol); setActiveTab('trade');}}>
-                                                                <td className="px-6 py-4 font-black text-white">
-                                                                    {stocks.find(st => st.id === i.symbol)?.name || i.symbol}
-                                                                    <span className="ml-2 text-[10px] text-slate-500">{i.symbol}</span>
-                                                                </td>
-                                                                <td className="px-6 py-4 font-bold">{i.quantity}</td>
-                                                                <td className="px-6 py-4 text-slate-400 font-bold">{isUS ? formatCurrency(i.avgPrice, 'USD') : formatKRW(i.avgPrice)}</td>
-                                                                <td className={`px-6 py-4 text-right font-black ${prof >= 0 ? 'text-emerald-400':'text-rose-400'}`}>{formatPercent(prof)}</td>
-                                                            </tr>
-                                                        );
-                                                    })}
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    )}
+                            <div className="space-y-4 animate-fade-in">
+                                <div className="flex justify-between items-center">
+                                    <h3 className="font-bold text-slate-800">내 포트폴리오</h3>
+                                    <span className="text-[10px] font-bold text-slate-400 uppercase">KRW 기반</span>
                                 </div>
+                                {portfolio.length === 0 ? (
+                                    <div className="text-center py-20 bg-slate-50 rounded-3xl border border-dashed border-slate-200">
+                                        <p className="text-sm text-slate-400 font-medium">보유한 주식이 없어요 지미!</p>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-3">
+                                        {portfolio.map(p => {
+                                            const cp = prices[p.symbol]?.[prices[p.symbol].length-1]?.price || p.avgPrice;
+                                            const gain = (cp - p.avgPrice) / p.avgPrice * 100;
+                                            return (
+                                                <div key={p.symbol} onClick={() => {setSelectedSymbol(p.symbol); setActiveTab('trade');}} className="bg-white border border-slate-100 p-4 rounded-2xl flex justify-between items-center shadow-sm active:scale-95 transition-all">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-xs ${p.symbol.includes('.KS') ? 'bg-blue-50 text-blue-500' : 'bg-orange-50 text-orange-500'}`}>
+                                                            {p.symbol.includes('.KS') ? '국내' : '해외'}
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-sm font-bold text-slate-800">{stocks.find(s=>s.id===p.symbol)?.name}</p>
+                                                            <p className="text-[10px] text-slate-400 font-bold">{p.quantity}주</p>
+                                                        </div>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <p className="text-sm font-bold tabular-nums">{formatMoney(cp, p.symbol.includes('.') ? 'KR':'US')}</p>
+                                                        <p className={`text-[11px] font-bold ${gain >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{formatPercent(gain)}</p>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
                             </div>
                         )}
 
                         {activeTab === 'trade' && (
-                            <div className="animate-fade-in grid grid-cols-1 lg:grid-cols-3 gap-6">
-                                <div className="lg:col-span-2 space-y-4">
-                                    <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-2">
-                                        <button onClick={() => {setIsAdding(!isAdding); setSearchQuery('');}} className="px-4 py-3 rounded-xl bg-blue-600 text-white font-black flex-shrink-0 active:scale-95 shadow-lg shadow-blue-500/20">
-                                            <i className={`fa-solid ${isAdding ? 'fa-xmark' : 'fa-magnifying-glass'} mr-2`}></i>검색 추가
-                                        </button>
-                                        {stocks.map(s => (
-                                            <div key={s.id} className="relative group flex-shrink-0">
-                                                <button onClick={() => setSelectedSymbol(s.id)} className={`px-5 py-3 rounded-xl text-sm font-black transition-all ${selectedSymbol === s.id ? "bg-white text-black shadow-lg" : "bg-[#1A1D23] text-slate-400 border border-white/5 hover:text-white"}`}>
-                                                    {s.name}
-                                                </button>
-                                                <button onClick={() => deleteStock(s.id)} className="absolute -top-1 -right-1 w-5 h-5 bg-rose-500 text-white rounded-full text-[10px] hidden group-hover:flex items-center justify-center shadow-lg"><i className="fa-solid fa-x"></i></button>
-                                            </div>
-                                        ))}
-                                    </div>
-
-                                    {isAdding && (
-                                        <div className="bg-[#1E222A] border border-blue-500/40 p-4 rounded-2xl animate-fade-in relative z-10 shadow-2xl">
-                                            <div className="relative">
-                                                <i className="fa-solid fa-search absolute left-4 top-3.5 text-slate-400"></i>
-                                                <input type="text" autoFocus placeholder="삼성전자, Tesla, 엔비디아..." value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} className="w-full bg-[#0F1115] border border-white/10 rounded-xl pl-11 pr-4 py-3 text-sm font-bold text-white outline-none focus:border-blue-500 transition-all" />
-                                                {isSearching && <div className="absolute right-4 top-3.5"><i className="fa-solid fa-circle-notch fa-spin text-blue-500"></i></div>}
-                                            </div>
-                                            {searchResults.length > 0 && (
-                                                <div className="mt-3 bg-[#0F1115] rounded-xl border border-white/5 overflow-hidden max-h-60 overflow-y-auto">
-                                                    {searchResults.map(s => (
-                                                        <div key={s.id} onClick={() => addStockFromSearch(s)} className="search-item px-5 py-4 cursor-pointer border-b border-white/5 flex justify-between items-center">
-                                                            <div>
-                                                                <p className="font-black text-white">{s.name}</p>
-                                                                <p className="text-[10px] text-slate-500 font-bold uppercase mt-1">{s.id} · {s.ex}</p>
-                                                            </div>
-                                                            <i className="fa-solid fa-plus text-blue-500"></i>
-                                                        </div>
-                                                    ))}
+                            <div className="space-y-4 animate-fade-in">
+                                {/* Search Bar */}
+                                <div className="relative">
+                                    <i className="fa-solid fa-search absolute left-4 top-3.5 text-slate-300 text-sm"></i>
+                                    <input 
+                                        type="text" 
+                                        placeholder="종목명 또는 코드 검색..." 
+                                        value={searchQuery}
+                                        onChange={e => setSearchQuery(e.target.value)}
+                                        className="w-full bg-slate-100 border-none rounded-2xl pl-10 pr-4 py-3 text-sm font-bold focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+                                    />
+                                    {searchResults.length > 0 && (
+                                        <div className="absolute top-14 left-0 right-0 bg-white border border-slate-100 rounded-2xl shadow-xl z-50 overflow-hidden">
+                                            {searchResults.map(s => (
+                                                <div key={s.id} onClick={() => { 
+                                                    if(!stocks.find(i=>i.id===s.id)) setStocks([...stocks, s]);
+                                                    setSelectedSymbol(s.id); 
+                                                    setSearchQuery(''); 
+                                                }} className="px-4 py-3 hover:bg-emerald-50 cursor-pointer flex justify-between items-center border-b border-slate-50 last:border-none">
+                                                    <span className="text-sm font-bold">{s.name} <span className="text-[10px] text-slate-400 ml-1">{s.id}</span></span>
+                                                    <i className="fa-solid fa-plus text-emerald-400"></i>
                                                 </div>
-                                            )}
+                                            ))}
                                         </div>
                                     )}
+                                </div>
 
-                                    <div className="bg-[#1A1D23] rounded-2xl border border-white/5 p-6 shadow-2xl">
-                                        <div className="flex items-end justify-between mb-8">
-                                            <div>
-                                                <h2 className="text-sm font-bold text-slate-400 mb-1 tracking-widest uppercase">{stocks.find(s=>s.id===selectedSymbol)?.name} ({selectedSymbol})</h2>
-                                                <h3 className="text-4xl font-black tracking-tighter text-white">
-                                                    {selectedSymbol.includes('.') ? formatKRW(currentPricesMap[selectedSymbol]) : formatCurrency(currentPricesMap[selectedSymbol], 'USD')}
-                                                </h3>
-                                            </div>
+                                {/* Stock Selector Tabs */}
+                                <div className="flex gap-2 overflow-x-auto no-scrollbar py-2">
+                                    {stocks.map(s => (
+                                        <button 
+                                            key={s.id} 
+                                            onClick={() => setSelectedSymbol(s.id)}
+                                            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex-shrink-0 ${selectedSymbol === s.id ? 'bg-emerald-500 text-white shadow-md shadow-emerald-100' : 'bg-slate-100 text-slate-400'}`}
+                                        >
+                                            {s.name}
+                                        </button>
+                                    ))}
+                                </div>
+
+                                {/* Chart Card */}
+                                <div className="bg-white border border-slate-100 rounded-3xl p-5 shadow-sm">
+                                    <div className="flex justify-between items-end mb-6">
+                                        <div>
+                                            <p className="text-[11px] font-bold text-slate-400 mb-1 uppercase tracking-widest">{selectedSymbol}</p>
+                                            <h3 className="text-xl font-black text-slate-800 tabular-nums leading-none">{formatMoney(currentPrice, selectedStockInfo?.market)}</h3>
                                         </div>
-                                        <div className="h-[320px]">
-                                            <ResponsiveContainer width="100%" height="100%">
-                                                <AreaChart data={prices[selectedSymbol]}>
-                                                    <defs>
-                                                        <linearGradient id="colorP" x1="0" y1="0" x2="0" y2="1">
-                                                            <stop offset="5%" stopColor={stocks.find(s=>s.id===selectedSymbol)?.color} stopOpacity={0.3}/>
-                                                            <stop offset="95%" stopColor={stocks.find(s=>s.id===selectedSymbol)?.color} stopOpacity={0}/>
-                                                        </linearGradient>
-                                                    </defs>
-                                                    <CartesianGrid strokeDasharray="3 3" stroke="#ffffff05" vertical={false} />
-                                                    <XAxis dataKey="time" hide />
-                                                    <YAxis hide domain={['auto', 'auto']} />
-                                                    <Tooltip contentStyle={{backgroundColor:'#1A1D23', border:'none', borderRadius:'12px', boxShadow:'0 10px 15px -3px rgba(0,0,0,0.5)'}} itemStyle={{fontWeight:'bold', color:'#fff'}} />
-                                                    <Area type="monotone" dataKey="price" stroke={stocks.find(s=>s.id===selectedSymbol)?.color} strokeWidth={4} fill="url(#colorP)" isAnimationActive={false} />
-                                                </AreaChart>
-                                            </ResponsiveContainer>
+                                        <div className="text-right">
+                                            <span className="text-[10px] font-black text-emerald-500 bg-emerald-50 px-2 py-1 rounded-lg">LIVE</span>
                                         </div>
+                                    </div>
+                                    
+                                    <div className="h-48 w-full">
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <AreaChart data={prices[selectedSymbol]}>
+                                                <defs>
+                                                    <linearGradient id="colorP" x1="0" y1="0" x2="0" y2="1">
+                                                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.2}/>
+                                                        <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                                                    </linearGradient>
+                                                </defs>
+                                                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                                                <XAxis dataKey="time" hide />
+                                                <YAxis hide domain={['auto', 'auto']} />
+                                                <Tooltip contentStyle={{borderRadius:'12px', border:'none', boxShadow:'0 4px 6px -1px rgb(0 0 0 / 0.1)'}} />
+                                                {userPos && <ReferenceLine y={userPos.avgPrice} stroke="#f59e0b" strokeDasharray="3 3" label={{ position:'right', value:'평단', fill:'#f59e0b', fontSize:10 }} />}
+                                                <Area type="monotone" dataKey="price" stroke="#10b981" strokeWidth={2} fill="url(#colorP)" isAnimationActive={false} />
+                                            </AreaChart>
+                                        </ResponsiveContainer>
                                     </div>
                                 </div>
 
-                                <div className="space-y-4">
-                                    <div className="bg-[#1A1D23] rounded-2xl border border-white/5 p-6 space-y-6 shadow-xl">
-                                        <div>
-                                            <label className="text-[10px] font-black text-slate-500 mb-4 block uppercase tracking-widest">Order Quantity</label>
-                                            <div className="flex items-center gap-3">
-                                                <button onClick={() => setTradeQuantity(q => Math.max(1, q - 1))} className="w-14 h-14 rounded-2xl bg-white/5 flex items-center justify-center transition-all"><i className="fa-solid fa-minus"></i></button>
-                                                <input type="number" value={tradeQuantity} onChange={e=>setTradeQuantity(Math.max(1, parseInt(e.target.value)||1))} className="flex-1 bg-white/5 rounded-2xl h-14 text-center text-2xl font-black outline-none" />
-                                                <button onClick={() => setTradeQuantity(q => q + 1)} className="w-14 h-14 rounded-2xl bg-white/5 flex items-center justify-center"><i className="fa-solid fa-plus"></i></button>
-                                            </div>
+                                {/* Trading Tools */}
+                                <div className="grid grid-cols-1 gap-4">
+                                    <div className="bg-slate-50 rounded-3xl p-5 flex items-center justify-between">
+                                        <button onClick={()=>setTradeQuantity(q=>Math.max(1,q-1))} className="w-10 h-10 bg-white rounded-xl shadow-sm text-slate-400 active:scale-90 transition-all"><i className="fa-solid fa-minus"></i></button>
+                                        <div className="text-center">
+                                            <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">수량설정</p>
+                                            <input type="number" value={tradeQuantity} onChange={e=>setTradeQuantity(parseInt(e.target.value)||1)} className="bg-transparent text-lg font-black text-slate-800 outline-none w-16 text-center tabular-nums" />
                                         </div>
-                                        <div className="grid grid-cols-2 gap-3">
-                                            <button onClick={()=>handleTrade('BUY')} className="h-16 rounded-[20px] bg-emerald-500 text-[#0F1115] font-black text-xl active:scale-95 transition-all">매수</button>
-                                            <button onClick={()=>handleTrade('SELL')} className="h-16 rounded-[20px] bg-rose-500 text-white font-black text-xl active:scale-95 transition-all">매도</button>
-                                        </div>
+                                        <button onClick={()=>setTradeQuantity(q=>q+1)} className="w-10 h-10 bg-white rounded-xl shadow-sm text-slate-400 active:scale-90 transition-all"><i className="fa-solid fa-plus"></i></button>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <button onClick={()=>handleTrade('BUY')} className="h-14 rounded-2xl bg-emerald-500 text-white font-bold text-sm active:scale-95 transition-all shadow-lg shadow-emerald-100">매수하기</button>
+                                        <button onClick={()=>handleTrade('SELL')} className="h-14 rounded-2xl bg-slate-800 text-white font-bold text-sm active:scale-95 transition-all shadow-lg shadow-slate-200">매도하기</button>
                                     </div>
                                 </div>
                             </div>
                         )}
 
                         {activeTab === 'history' && (
-                            <div className="animate-fade-in space-y-4">
-                                <h2 className="text-lg font-bold px-1">거래 히스토리</h2>
-                                <div className="bg-[#1A1D23] rounded-2xl border border-white/5 overflow-hidden">
-                                    {history.length === 0 ? <p className="p-20 text-center text-slate-600 font-bold">거래 내역이 없습니다.</p> : (
-                                        <div className="divide-y divide-white/5">
-                                            {history.map(tx => (
-                                                <div key={tx.id} className="p-5 flex justify-between items-center hover:bg-white/5 transition-colors">
-                                                    <div className="flex items-center gap-4">
-                                                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-[10px] ${tx.type === 'BUY' ? 'bg-emerald-500/10 text-emerald-400':'bg-rose-500/10 text-rose-400'}`}>
-                                                            {tx.type === 'BUY' ? '매수' : '매도'}
-                                                        </div>
-                                                        <div>
-                                                            <p className="font-black text-white">{stocks.find(s=>s.id===tx.symbol)?.name || tx.symbol}</p>
-                                                            <p className="text-[10px] text-slate-500 font-bold mt-1">{new Date(tx.timestamp).toLocaleString()}</p>
-                                                        </div>
-                                                    </div>
-                                                    <div className="text-right">
-                                                        <p className="font-black text-white">{tx.quantity} 주</p>
-                                                        <p className="text-xs text-slate-400 font-bold mt-1">{formatKRW(tx.price)}</p>
-                                                    </div>
+                            <div className="space-y-3 animate-fade-in">
+                                <h3 className="font-bold text-slate-800 mb-4">최근 거래 내역</h3>
+                                {history.length === 0 ? <p className="text-center py-20 text-slate-400 text-sm">기록이 없습니다.</p> : (
+                                    history.map(h => (
+                                        <div key={h.id} className="bg-white border border-slate-100 p-4 rounded-2xl flex justify-between items-center">
+                                            <div className="flex items-center gap-3">
+                                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-[10px] font-bold ${h.type === 'BUY' ? 'bg-emerald-50 text-emerald-500':'bg-slate-100 text-slate-500'}`}>
+                                                    {h.type === 'BUY' ? '매수' : '매도'}
                                                 </div>
-                                            ))}
+                                                <div>
+                                                    <p className="text-xs font-bold">{stocks.find(s=>s.id===h.symbol)?.name}</p>
+                                                    <p className="text-[10px] text-slate-400">{new Date(h.timestamp).toLocaleDateString()}</p>
+                                                </div>
+                                            </div>
+                                            <div className="text-right font-bold tabular-nums">
+                                                <p className="text-xs text-slate-800">{h.quantity}주</p>
+                                                <p className="text-[10px] text-slate-400">{formatMoney(h.price, h.symbol.includes('.') ? 'KR':'US')}</p>
+                                            </div>
                                         </div>
-                                    )}
-                                </div>
+                                    ))
+                                )}
                             </div>
                         )}
                     </main>
 
-                    <nav className="fixed bottom-0 left-0 right-0 bg-[#1A1D23]/95 backdrop-blur-xl border-t border-white/5 px-6 py-4 z-50">
-                        <div className="max-w-md mx-auto flex justify-between">
-                            <button onClick={()=>setActiveTab('dashboard')} className={`flex flex-col items-center gap-1.5 w-1/3 transition-colors ${activeTab === 'dashboard' ? 'text-blue-500':'text-slate-500'}`}><i className="fa-solid fa-border-all text-xl"></i><span className="text-[10px] font-black uppercase tracking-tighter">대시보드</span></button>
-                            <button onClick={()=>setActiveTab('trade')} className={`flex flex-col items-center gap-1.5 w-1/3 transition-colors ${activeTab === 'trade' ? 'text-blue-500':'text-slate-500'}`}><i className="fa-solid fa-chart-simple text-xl"></i><span className="text-[10px] font-black uppercase tracking-tighter">주식거래</span></button>
-                            <button onClick={()=>setActiveTab('history')} className={`flex flex-col items-center gap-1.5 w-1/3 transition-colors ${activeTab === 'history' ? 'text-blue-500':'text-slate-500'}`}><i className="fa-solid fa-clock-rotate-left text-xl"></i><span className="text-[10px] font-black uppercase tracking-tighter">내역</span></button>
-                        </div>
+                    {/* Nav Bar */}
+                    <nav className="fixed bottom-0 max-w-md w-full bg-white border-t border-slate-100 px-6 py-3 flex justify-between items-center z-50 shadow-[0_-10px_20px_-10px_rgba(0,0,0,0.05)]">
+                        <button onClick={()=>setActiveTab('dashboard')} className={`flex flex-col items-center gap-1 w-1/3 transition-all ${activeTab === 'dashboard' ? 'text-emerald-500':'text-slate-300'}`}>
+                            <i className="fa-solid fa-house-chimney text-lg"></i>
+                            <span className="text-[9px] font-bold uppercase">홈</span>
+                        </button>
+                        <button onClick={()=>setActiveTab('trade')} className={`flex flex-col items-center gap-1 w-1/3 transition-all ${activeTab === 'trade' ? 'text-emerald-500':'text-slate-300'}`}>
+                            <i className="fa-solid fa-chart-simple text-lg"></i>
+                            <span className="text-[9px] font-bold uppercase">거래</span>
+                        </button>
+                        <button onClick={()=>setActiveTab('history')} className={`flex flex-col items-center gap-1 w-1/3 transition-all ${activeTab === 'history' ? 'text-emerald-500':'text-slate-300'}`}>
+                            <i className="fa-solid fa-clock-rotate-left text-lg"></i>
+                            <span className="text-[9px] font-bold uppercase">내역</span>
+                        </button>
                     </nav>
                 </div>
             );
