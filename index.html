@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>V-STOCK KR: 자동 검색 버전</title>
+    <title>V-STOCK KR: 초고속 스마트 검색</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&display=swap" rel="stylesheet" />
@@ -20,7 +20,7 @@
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .animate-fade-in { animation: fadeIn 0.3s ease-out forwards; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        .search-item:hover { background-color: rgba(59, 130, 246, 0.1); }
+        .search-item:hover { background-color: rgba(59, 130, 246, 0.15); }
     </style>
 </head>
 <body>
@@ -38,6 +38,35 @@
             { id: '000660.KS', name: 'SK하이닉스', color: '#EA002C' },
             { id: '035720.KS', name: '카카오', color: '#FAE100' },
             { id: '005380.KS', name: '현대차', color: '#002C5F' }
+        ];
+
+        // 🚀 초고속 검색을 위한 로컬 종목 데이터베이스 (Top 60)
+        const LOCAL_STOCK_DB = [
+            {id: "005930.KS", name: "삼성전자", ex: "코스피"}, {id: "000660.KS", name: "SK하이닉스", ex: "코스피"},
+            {id: "373220.KS", name: "LG에너지솔루션", ex: "코스피"}, {id: "207940.KS", name: "삼성바이오로직스", ex: "코스피"},
+            {id: "005380.KS", name: "현대차", ex: "코스피"}, {id: "000270.KS", name: "기아", ex: "코스피"},
+            {id: "068270.KS", name: "셀트리온", ex: "코스피"}, {id: "005490.KS", name: "POSCO홀딩스", ex: "코스피"},
+            {id: "035420.KS", name: "NAVER", ex: "코스피"}, {id: "035420.KS", name: "네이버", ex: "코스피"},
+            {id: "051910.KS", name: "LG화학", ex: "코스피"}, {id: "000810.KS", name: "삼성화재", ex: "코스피"},
+            {id: "035720.KS", name: "카카오", ex: "코스피"}, {id: "006400.KS", name: "삼성SDI", ex: "코스피"},
+            {id: "105560.KS", name: "KB금융", ex: "코스피"}, {id: "055550.KS", name: "신한지주", ex: "코스피"},
+            {id: "012330.KS", name: "현대모비스", ex: "코스피"}, {id: "032830.KS", name: "삼성생명", ex: "코스피"},
+            {id: "086520.KQ", name: "에코프로", ex: "코스닥"}, {id: "247540.KQ", name: "에코프로비엠", ex: "코스닥"},
+            {id: "086960.KQ", name: "HLB", ex: "코스닥"}, {id: "028300.KQ", name: "알테오젠", ex: "코스닥"},
+            {id: "066970.KQ", name: "엘앤에프", ex: "코스닥"}, {id: "035900.KQ", name: "JYP Ent.", ex: "코스닥"},
+            {id: "042700.KS", name: "한미반도체", ex: "코스피"}, {id: "003670.KS", name: "포스코퓨처엠", ex: "코스피"},
+            {id: "011200.KS", name: "HMM", ex: "코스피"}, {id: "034020.KS", name: "두산에너빌리티", ex: "코스피"},
+            {id: "010130.KS", name: "고려아연", ex: "코스피"}, {id: "022100.KS", name: "포스코인터내셔널", ex: "코스피"},
+            {id: "015760.KS", name: "한국전력", ex: "코스피"}, {id: "034730.KS", name: "SK", ex: "코스피"},
+            {id: "033780.KS", name: "KT&G", ex: "코스피"}, {id: "000100.KS", name: "유한양행", ex: "코스피"},
+            {id: "018260.KS", name: "삼성SDS", ex: "코스피"}, {id: "090430.KS", name: "아모레퍼시픽", ex: "코스피"},
+            {id: "010950.KS", name: "S-Oil", ex: "코스피"}, {id: "011170.KS", name: "롯데지주", ex: "코스피"},
+            {id: "323410.KS", name: "카카오뱅크", ex: "코스피"}, {id: "316140.KS", name: "우리금융지주", ex: "코스피"},
+            {id: "024110.KS", name: "기업은행", ex: "코스피"}, {id: "352820.KS", name: "하이브", ex: "코스피"},
+            {id: "259960.KS", name: "크래프톤", ex: "코스피"}, {id: "017670.KS", name: "SK텔레콤", ex: "코스피"},
+            {id: "030200.KS", name: "KT", ex: "코스피"}, {id: "032640.KS", name: "LG유플러스", ex: "코스피"},
+            {id: "036570.KS", name: "엔씨소프트", ex: "코스피"}, {id: "251270.KS", name: "넷마블", ex: "코스피"},
+            {id: "192820.KS", name: "코스맥스", ex: "코스피"}, {id: "271560.KS", name: "오리온", ex: "코스피"}
         ];
 
         const PROXY_BASE = "https://api.allorigins.win/raw?url=";
@@ -94,43 +123,62 @@
                 return () => clearInterval(timer);
             }, [stocks]);
 
-            // 🚀 스마트 종목 검색 기능
+            // 🚀 하이브리드 검색 기능 (로컬 즉시 검색 + API 검색)
             useEffect(() => {
-                if (searchQuery.length < 2) {
+                if (!searchQuery.trim()) {
                     setSearchResults([]);
+                    setIsSearching(false);
                     return;
                 }
+
+                // 1단계: 로컬 DB에서 초고속 검색 (타자 치는 즉시 나옴)
+                const localResults = LOCAL_STOCK_DB.filter(s => 
+                    s.name.includes(searchQuery) || s.id.includes(searchQuery)
+                );
+                setSearchResults(localResults);
+
+                // 2단계: 로컬에 없는 종목을 위한 야후 API 우회 검색 (0.8초 디바운스)
                 const delayDebounceFn = setTimeout(async () => {
                     setIsSearching(true);
                     try {
-                        const url = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(searchQuery)}&quotesCount=10`;
+                        const url = `https://query2.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(searchQuery)}&quotesCount=10`;
                         const res = await fetch(PROXY_BASE + encodeURIComponent(url));
-                        const data = await res.json();
-                        // 한국 주식(.KS, .KQ) 위주로 필터링 및 정렬
-                        const filtered = data.quotes
-                            .filter(q => q.symbol.endsWith('.KS') || q.symbol.endsWith('.KQ'))
-                            .map(q => ({
-                                id: q.symbol,
-                                name: q.shortname || q.longname || q.symbol,
-                                exchange: q.exchDisp
-                            }));
-                        setSearchResults(filtered);
-                    } catch (e) { console.error("검색 실패", e); }
+                        if (res.ok) {
+                            const data = await res.json();
+                            const externalResults = data.quotes
+                                .filter(q => q.symbol.endsWith('.KS') || q.symbol.endsWith('.KQ'))
+                                .map(q => ({
+                                    id: q.symbol,
+                                    name: q.shortname || q.longname || q.symbol,
+                                    ex: q.symbol.endsWith('.KS') ? '코스피' : '코스닥'
+                                }));
+                            
+                            // 로컬 결과와 외부 결과를 중복 없이 합침
+                            setSearchResults(prev => {
+                                const merged = [...prev];
+                                externalResults.forEach(ext => {
+                                    if (!merged.find(p => p.id === ext.id)) {
+                                        merged.push(ext);
+                                    }
+                                });
+                                return merged;
+                            });
+                        }
+                    } catch (e) { console.error("외부 검색 오류", e); }
                     setIsSearching(false);
-                }, 500); // 타자 멈추고 0.5초 뒤 검색
+                }, 800); 
 
                 return () => clearTimeout(delayDebounceFn);
             }, [searchQuery]);
 
             const addStockFromSearch = (s) => {
-                if (stocks.find(item => item.id === s.id)) return alert('이미 리스트에 있습니다!');
-                const colors = ['#F59E0B', '#10B981', '#3B82F6', '#8B5CF6', '#EC4899', '#00D1FF'];
-                const newStock = { ...s, color: colors[stocks.length % colors.length] };
+                if (stocks.find(item => item.id === s.id)) return alert('이미 리스트에 추가되어 있습니다!');
+                const colors = ['#F59E0B', '#10B981', '#3B82F6', '#8B5CF6', '#EC4899', '#00D1FF', '#FF4560'];
+                const newStock = { id: s.id, name: s.name, color: colors[stocks.length % colors.length] };
                 setStocks([...stocks, newStock]);
                 setIsAdding(false);
                 setSearchQuery('');
                 setSelectedSymbol(s.id);
-                alert(`${s.name} 추가 완료!`);
             };
 
             const deleteStock = (id) => {
@@ -149,8 +197,9 @@
 
             const handleTrade = (type) => {
                 const price = currentPricesMap[selectedSymbol];
-                if (!price) return;
+                if (!price) return alert('시세를 불러오는 중입니다. 잠시만 기다려주세요.');
                 const cost = price * tradeQuantity;
+                
                 if (type === 'BUY') {
                     if (balance < cost) return alert('잔고 부족!');
                     setBalance(b => b - cost);
@@ -161,7 +210,7 @@
                     });
                 } else {
                     const exist = portfolio.find(i => i.symbol === selectedSymbol);
-                    if (!exist || exist.quantity < tradeQuantity) return alert('수량 부족!');
+                    if (!exist || exist.quantity < tradeQuantity) return alert('보유 수량이 부족합니다!');
                     setBalance(b => b + cost);
                     setPortfolio(p => {
                         const nq = exist.quantity - tradeQuantity;
@@ -180,7 +229,7 @@
                             </div>
                             <h1 className="text-xl font-black">V-STOCK SMART</h1>
                         </div>
-                        <button onClick={() => { if(confirm('리셋할까요?')) {localStorage.clear(); location.reload();} }} className="text-slate-500 hover:text-white"><i className="fa-solid fa-rotate-right"></i></button>
+                        <button onClick={() => { if(confirm('모든 데이터를 리셋할까요?')) {localStorage.clear(); location.reload();} }} className="text-slate-500 hover:text-white"><i className="fa-solid fa-rotate-right"></i></button>
                     </header>
 
                     <main className="max-w-5xl mx-auto px-4 py-6">
@@ -218,8 +267,8 @@
                                                     const prof = (cp - i.avgPrice) / i.avgPrice * 100;
                                                     return (
                                                         <tr key={i.symbol} className="hover:bg-white/5 cursor-pointer" onClick={() => {setSelectedSymbol(i.symbol); setActiveTab('trade');}}>
-                                                            <td className="px-6 py-4 font-black">{stocks.find(st => st.id === i.symbol)?.name || i.symbol}</td>
-                                                            <td className="px-6 py-4 font-bold">{i.quantity}</td>
+                                                            <td className="px-6 py-4 font-black text-white">{stocks.find(st => st.id === i.symbol)?.name || i.symbol}</td>
+                                                            <td className="px-6 py-4 font-bold text-slate-300">{i.quantity}</td>
                                                             <td className="px-6 py-4 text-slate-400 font-bold">{formatKRW(i.avgPrice)}</td>
                                                             <td className={`px-6 py-4 text-right font-black ${prof >= 0 ? 'text-emerald-400':'text-rose-400'}`}>{formatPercent(prof)}</td>
                                                         </tr>
@@ -235,13 +284,14 @@
                         {activeTab === 'trade' && (
                             <div className="animate-fade-in grid grid-cols-1 lg:grid-cols-3 gap-6">
                                 <div className="lg:col-span-2 space-y-4">
+                                    {/* 종목 리스트 탭 */}
                                     <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-2">
-                                        <button onClick={() => setIsAdding(!isAdding)} className="px-4 py-3 rounded-xl bg-blue-600 text-white font-black flex-shrink-0 active:scale-95 transition-all">
+                                        <button onClick={() => {setIsAdding(!isAdding); setSearchQuery('');}} className="px-4 py-3 rounded-xl bg-blue-600 text-white font-black flex-shrink-0 active:scale-95 transition-all shadow-lg shadow-blue-500/20">
                                             <i className={`fa-solid ${isAdding ? 'fa-xmark' : 'fa-plus'} mr-2`}></i>종목 찾기
                                         </button>
                                         {stocks.map(s => (
                                             <div key={s.id} className="relative group flex-shrink-0">
-                                                <button onClick={() => setSelectedSymbol(s.id)} className={`px-5 py-3 rounded-xl text-sm font-black transition-all ${selectedSymbol === s.id ? "bg-white text-black shadow-lg" : "bg-[#1A1D23] text-slate-400 border border-white/5"}`}>
+                                                <button onClick={() => setSelectedSymbol(s.id)} className={`px-5 py-3 rounded-xl text-sm font-black transition-all ${selectedSymbol === s.id ? "bg-white text-black shadow-lg" : "bg-[#1A1D23] text-slate-400 border border-white/5 hover:text-white"}`}>
                                                     {s.name}
                                                 </button>
                                                 <button onClick={() => deleteStock(s.id)} className="absolute -top-1 -right-1 w-5 h-5 bg-rose-500 text-white rounded-full text-[10px] hidden group-hover:flex items-center justify-center shadow-lg"><i className="fa-solid fa-x"></i></button>
@@ -251,43 +301,49 @@
 
                                     {/* 🚀 스마트 검색창 UI */}
                                     {isAdding && (
-                                        <div className="bg-[#1E222A] border border-blue-500/30 p-4 rounded-2xl animate-fade-in relative z-10">
+                                        <div className="bg-[#1E222A] border border-blue-500/50 p-4 rounded-2xl animate-fade-in relative z-10 shadow-2xl">
                                             <div className="relative">
+                                                <i className="fa-solid fa-magnifying-glass absolute left-4 top-3.5 text-slate-400"></i>
                                                 <input 
                                                     type="text" 
                                                     autoFocus
-                                                    placeholder="종목명 입력 (예: 삼성전자, 카카오...)" 
+                                                    placeholder="종목명 입력 (예: 삼성전자, 네이버, 카카오)" 
                                                     value={searchQuery} 
                                                     onChange={e=>setSearchQuery(e.target.value)} 
-                                                    className="w-full bg-[#0F1115] border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-500 transition-all" 
+                                                    className="w-full bg-[#0F1115] border border-white/10 rounded-xl pl-11 pr-4 py-3 text-sm font-bold text-white outline-none focus:border-blue-500 transition-all" 
                                                 />
                                                 {isSearching && <div className="absolute right-4 top-3.5"><i className="fa-solid fa-circle-notch fa-spin text-blue-500"></i></div>}
                                             </div>
                                             
                                             {searchResults.length > 0 && (
-                                                <div className="mt-3 bg-[#0F1115] rounded-xl border border-white/5 overflow-hidden max-h-60 overflow-y-auto">
+                                                <div className="mt-3 bg-[#0F1115] rounded-xl border border-white/5 overflow-hidden max-h-60 overflow-y-auto shadow-inner">
                                                     {searchResults.map(s => (
-                                                        <div key={s.id} onClick={() => addStockFromSearch(s)} className="search-item px-4 py-3 cursor-pointer border-b border-white/5 flex justify-between items-center transition-colors">
+                                                        <div key={s.id} onClick={() => addStockFromSearch(s)} className="search-item px-5 py-4 cursor-pointer border-b border-white/5 flex justify-between items-center transition-colors">
                                                             <div>
-                                                                <p className="font-black text-white">{s.name}</p>
-                                                                <p className="text-[10px] text-slate-500 font-bold uppercase">{s.id} · {s.exchange}</p>
+                                                                <p className="font-black text-white text-base">{s.name}</p>
+                                                                <p className="text-[10px] text-slate-500 font-bold uppercase mt-1">{s.id} <span className="mx-1">·</span> {s.ex || s.exchange}</p>
                                                             </div>
-                                                            <i className="fa-solid fa-plus text-blue-500"></i>
+                                                            <button className="bg-blue-600/20 text-blue-400 w-8 h-8 rounded-full flex items-center justify-center"><i className="fa-solid fa-plus"></i></button>
                                                         </div>
                                                     ))}
                                                 </div>
                                             )}
-                                            {searchQuery.length >= 2 && !isSearching && searchResults.length === 0 && (
-                                                <p className="text-xs text-slate-500 mt-3 text-center py-2">검색 결과가 없습니다.</p>
+                                            {searchQuery.length > 0 && !isSearching && searchResults.length === 0 && (
+                                                <p className="text-sm font-bold text-slate-500 mt-4 mb-2 text-center">검색 결과가 없습니다.</p>
                                             )}
                                         </div>
                                     )}
 
-                                    <div className="bg-[#1A1D23] rounded-2xl border border-white/5 p-6 shadow-2xl">
-                                        <h3 className="text-4xl font-black tracking-tighter mb-8 flex items-baseline gap-2">
-                                            {formatKRW(currentPricesMap[selectedSymbol])}
-                                            <span className="text-xs font-bold text-slate-500 uppercase tracking-widest ml-2">Real-time</span>
-                                        </h3>
+                                    {/* 차트 영역 */}
+                                    <div className="bg-[#1A1D23] rounded-2xl border border-white/5 p-6 shadow-2xl mt-4">
+                                        <div className="flex items-end justify-between mb-8">
+                                            <div>
+                                                <h2 className="text-sm font-bold text-slate-400 mb-1">{stocks.find(s=>s.id===selectedSymbol)?.name}</h2>
+                                                <h3 className="text-4xl font-black tracking-tighter flex items-baseline gap-2 text-white">
+                                                    {formatKRW(currentPricesMap[selectedSymbol])}
+                                                </h3>
+                                            </div>
+                                        </div>
                                         <div className="h-[320px]">
                                             <ResponsiveContainer width="100%" height="100%">
                                                 <AreaChart data={prices[selectedSymbol]}>
@@ -300,7 +356,7 @@
                                                     <CartesianGrid strokeDasharray="3 3" stroke="#ffffff05" vertical={false} />
                                                     <XAxis dataKey="time" hide />
                                                     <YAxis hide domain={['auto', 'auto']} />
-                                                    <Tooltip contentStyle={{backgroundColor:'#1A1D23', border:'none', borderRadius:'12px', boxShadow:'0 10px 15px -3px rgba(0,0,0,0.5)'}} itemStyle={{fontWeight:'bold'}} />
+                                                    <Tooltip contentStyle={{backgroundColor:'#1A1D23', border:'1px solid rgba(255,255,255,0.1)', borderRadius:'12px', boxShadow:'0 10px 15px -3px rgba(0,0,0,0.5)'}} itemStyle={{fontWeight:'bold', color:'#fff'}} />
                                                     <Area type="monotone" dataKey="price" stroke={stocks.find(s=>s.id===selectedSymbol)?.color} strokeWidth={4} fill="url(#colorP)" isAnimationActive={false} />
                                                 </AreaChart>
                                             </ResponsiveContainer>
@@ -308,13 +364,14 @@
                                     </div>
                                 </div>
 
+                                {/* 매수/매도 영역 */}
                                 <div className="space-y-4">
                                     <div className="bg-[#1A1D23] rounded-2xl border border-white/5 p-6 space-y-6 shadow-xl">
                                         <div>
                                             <label className="text-[10px] font-black text-slate-500 mb-4 block uppercase tracking-[0.2em]">Quantity Control</label>
                                             <div className="flex items-center gap-3">
                                                 <button onClick={() => setTradeQuantity(q => Math.max(1, q - 1))} className="w-14 h-14 rounded-2xl bg-white/5 hover:bg-white/10 flex items-center justify-center transition-all"><i className="fa-solid fa-minus"></i></button>
-                                                <input type="number" value={tradeQuantity} onChange={e=>setTradeQuantity(Math.max(1, parseInt(e.target.value)||1))} className="flex-1 bg-white/5 rounded-2xl h-14 text-center text-2xl font-black outline-none focus:bg-white/10 transition-all" />
+                                                <input type="number" value={tradeQuantity} onChange={e=>setTradeQuantity(Math.max(1, parseInt(e.target.value)||1))} className="flex-1 bg-white/5 rounded-2xl h-14 text-center text-2xl font-black text-white outline-none focus:bg-white/10 transition-all" />
                                                 <button onClick={() => setTradeQuantity(q => q + 1)} className="w-14 h-14 rounded-2xl bg-white/5 flex items-center justify-center hover:bg-white/10 transition-all"><i className="fa-solid fa-plus"></i></button>
                                             </div>
                                         </div>
@@ -368,8 +425,7 @@
             );
         };
 
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<App />);
+        ReactDOM.createRoot(document.getElementById('root')).render(<App />);
     </script>
 </body>
 </html>
